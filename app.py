@@ -1,5 +1,6 @@
 import os
 import uuid
+import mimetypes
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
@@ -11,6 +12,9 @@ from models import (
     update_pdf_name, delete_pdf, get_newest_pdf,
     get_setting, set_setting
 )
+
+# Add MIME type for .mjs files (ES6 JavaScript modules)
+mimetypes.add_type('text/javascript', '.mjs')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
