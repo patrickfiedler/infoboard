@@ -54,7 +54,7 @@ The `deploy.sh` script automates the entire setup process.
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/parsnipsmoothie/kundenstopper.git
+   git clone https://github.com/patrickfiedler/kundenstopper.git
    cd kundenstopper
    ```
 
@@ -243,7 +243,7 @@ If you prefer to deploy manually without the `deploy.sh` script:
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/parsnipsmoothie/kundenstopper.git
+git clone https://github.com/patrickfiedler/kundenstopper.git
 cd kundenstopper
 ```
 
@@ -529,7 +529,7 @@ To deploy on multiple machines:
 
 1. **Clone on each machine:**
    ```bash
-   git clone https://github.com/parsnipsmoothie/kundenstopper.git
+   git clone https://github.com/patrickfiedler/kundenstopper.git
    cd kundenstopper
    ./deploy.sh
    ```
@@ -550,6 +550,6 @@ To deploy on multiple machines:
 
 ## Getting Help
 
-- **GitHub Issues:** https://github.com/parsnipsmoothie/kundenstopper/issues
+- **GitHub Issues:** https://github.com/patrickfiedler/kundenstopper/issues
 - **Documentation:** See README.md for usage instructions
 - **Logs:** Always check `sudo journalctl -u kundenstopper -n 50` when troubleshooting

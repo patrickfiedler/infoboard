@@ -27,7 +27,7 @@ A Flask-based web application for displaying PDF files in a browser with automat
 ### Automated Installation (Recommended)
 
 ```bash
-git clone https://github.com/parsnipsmoothie/kundenstopper.git
+git clone https://github.com/patrickfiedler/kundenstopper.git
 cd kundenstopper
 ./deploy.sh
 ```
@@ -46,7 +46,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed installation instructions, inclu
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/parsnipsmoothie/kundenstopper.git
+   git clone https://github.com/patrickfiedler/kundenstopper.git
    cd kundenstopper
    ```
 
