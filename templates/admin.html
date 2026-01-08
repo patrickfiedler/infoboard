@@ -153,6 +153,14 @@
             background: #218838;
         }
 
+        .btn-info {
+            background: #17a2b8;
+        }
+
+        .btn-info:hover {
+            background: #138496;
+        }
+
         .btn-sm {
             padding: 6px 12px;
             font-size: 12px;
@@ -348,6 +356,9 @@
                                         <form method="POST" action="{{ url_for('select_pdf', pdf_id=pdf['id']) }}">
                                             <button type="submit" class="btn-sm btn-success">Auswählen</button>
                                         </form>
+                                        <a href="{{ url_for('serve_pdf', filename=pdf['filename']) }}"
+                                           download="{{ pdf['original_name'] }}"
+                                           class="btn btn-sm btn-info">Herunterladen</a>
                                         <form method="POST" action="{{ url_for('delete_pdf_file', pdf_id=pdf['id']) }}"
                                               onsubmit="return confirm('Sind Sie sicher, dass Sie diese Datei löschen möchten?');">
                                             <button type="submit" class="btn-sm btn-danger">Löschen</button>
