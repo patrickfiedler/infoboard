@@ -1,0 +1,8 @@
+{
+  "admin_username": "admin",
+  "admin_password_hash": "$2b$12$EXAMPLE_HASH_REPLACE_WITH_REAL_HASH",
+  "secret_key": "change-this-to-a-random-secret-key",
+  "port": 8080,
+  "host": "0.0.0.0",
+  "upload_folder": "uploads"
+}
