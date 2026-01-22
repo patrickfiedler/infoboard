@@ -62,6 +62,16 @@ def init_db():
             VALUES ('progress_indicator', 'progress')
         ''')
 
+        conn.execute('''
+            INSERT OR IGNORE INTO settings (key, value)
+            VALUES ('auto_cleanup_enabled', 'true')
+        ''')
+
+        conn.execute('''
+            INSERT OR IGNORE INTO settings (key, value)
+            VALUES ('auto_cleanup_days', '180')
+        ''')
+
 
 def get_setting(key, default=None):
     """Get a setting value from the database."""
@@ -147,3 +157,73 @@ def get_newest_pdf():
         return conn.execute(
             'SELECT * FROM pdf_files ORDER BY upload_date DESC LIMIT 1'
         ).fetchone()
+
+
+def cleanup_old_pdfs(upload_folder):
+    """
+    Delete PDF files older than the configured threshold.
+    Excludes the currently active PDF from deletion.
+
+    Args:
+        upload_folder: Path to the uploads directory
+
+    Returns:
+        int: Number of files deleted
+    """
+    from datetime import timedelta
+
+    # Check if auto cleanup is enabled
+    auto_cleanup_enabled = get_setting('auto_cleanup_enabled', 'true')
+    if auto_cleanup_enabled.lower() != 'true':
+        return 0
+
+    # Get cleanup threshold in days
+    cleanup_days = int(get_setting('auto_cleanup_days', '180'))
+
+    # Get currently active PDF ID
+    selected_pdf_id = int(get_setting('selected_pdf_id', '0'))
+
+    # If selected_pdf_id is 0, get the actual newest PDF ID to exclude it
+    active_pdf_id = None
+    if selected_pdf_id == 0:
+        newest_pdf = get_newest_pdf()
+        if newest_pdf:
+            active_pdf_id = newest_pdf['id']
+    else:
+        active_pdf_id = selected_pdf_id
+
+    # Calculate cutoff date
+    cutoff_date = datetime.now() - timedelta(days=cleanup_days)
+
+    # Find old PDFs to delete
+    with get_db() as conn:
+        if active_pdf_id:
+            old_pdfs = conn.execute(
+                '''SELECT * FROM pdf_files
+                   WHERE upload_date < ? AND id != ?''',
+                (cutoff_date, active_pdf_id)
+            ).fetchall()
+        else:
+            # No active PDF, delete all old ones
+            old_pdfs = conn.execute(
+                '''SELECT * FROM pdf_files
+                   WHERE upload_date < ?''',
+                (cutoff_date,)
+            ).fetchall()
+
+        deleted_count = 0
+        for pdf in old_pdfs:
+            # Delete from database
+            conn.execute('DELETE FROM pdf_files WHERE id = ?', (pdf['id'],))
+
+            # Delete physical file
+            filepath = os.path.join(upload_folder, pdf['filename'])
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                    deleted_count += 1
+                except OSError:
+                    # Log error but continue with other files
+                    pass
+
+        return deleted_count

@@ -73,6 +73,12 @@
             border: 1px solid #f5c6cb;
         }
 
+        .alert-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
         .section {
             margin-bottom: 40px;
         }
@@ -309,9 +315,33 @@
                                 <option value="none" {% if progress_indicator == 'none' %}selected{% endif %}>Keine</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="form-row" style="margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="auto_cleanup_enabled">Automatisches Löschen alter PDFs</label>
+                            <select id="auto_cleanup_enabled" name="auto_cleanup_enabled" required>
+                                <option value="true" {% if auto_cleanup_enabled == 'true' %}selected{% endif %}>Aktiviert</option>
+                                <option value="false" {% if auto_cleanup_enabled == 'false' %}selected{% endif %}>Deaktiviert</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="auto_cleanup_days">Aufbewahrungsdauer (Tage)</label>
+                            <input type="number" id="auto_cleanup_days" name="auto_cleanup_days"
+                                   value="{{ auto_cleanup_days }}" min="1" max="3650" required>
+                        </div>
                         <button type="submit">Einstellungen aktualisieren</button>
                     </div>
                 </form>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                    <form method="POST" action="{{ url_for('manual_cleanup') }}"
+                          onsubmit="return confirm('Möchten Sie alte PDFs jetzt löschen? PDFs älter als {{ auto_cleanup_days }} Tage werden gelöscht (aktive PDF wird ausgeschlossen).');">
+                        <button type="submit" class="btn-info">Alte PDFs jetzt löschen</button>
+                    </form>
+                    <p style="margin-top: 8px; font-size: 12px; color: #666;">
+                        Löscht manuell alle PDFs, die älter als {{ auto_cleanup_days }} Tage sind.
+                        Die aktive PDF wird nicht gelöscht.
+                    </p>
+                </div>
             </div>
         </div>
 

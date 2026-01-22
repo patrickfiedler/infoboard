@@ -10,7 +10,7 @@ from config import config
 from models import (
     init_db, add_pdf, get_pdf, get_all_pdfs, get_pdf_count,
     update_pdf_name, delete_pdf, get_newest_pdf,
-    get_setting, set_setting
+    get_setting, set_setting, cleanup_old_pdfs
 )
 
 # Add MIME type for .mjs files (ES6 JavaScript modules)
@@ -144,6 +144,8 @@ def admin():
     cycle_interval = int(get_setting('cycle_interval', '10'))
     background_color = get_setting('background_color', '#ffffff')
     progress_indicator = get_setting('progress_indicator', 'progress')
+    auto_cleanup_enabled = get_setting('auto_cleanup_enabled', 'true')
+    auto_cleanup_days = int(get_setting('auto_cleanup_days', '180'))
 
     return render_template(
         'admin.html',
@@ -153,7 +155,9 @@ def admin():
         selected_id=selected_id,
         cycle_interval=cycle_interval,
         background_color=background_color,
-        progress_indicator=progress_indicator
+        progress_indicator=progress_indicator,
+        auto_cleanup_enabled=auto_cleanup_enabled,
+        auto_cleanup_days=auto_cleanup_days
     )
 
 
@@ -188,7 +192,13 @@ def upload_pdf():
     # Add to database
     add_pdf(unique_filename, original_name, file_size)
 
-    flash(f'Datei "{original_name}" erfolgreich hochgeladen', 'success')
+    # Run automatic cleanup of old PDFs
+    deleted_count = cleanup_old_pdfs(app.config['UPLOAD_FOLDER'])
+    if deleted_count > 0:
+        flash(f'Datei "{original_name}" erfolgreich hochgeladen. {deleted_count} alte Datei(en) automatisch gelöscht.', 'success')
+    else:
+        flash(f'Datei "{original_name}" erfolgreich hochgeladen', 'success')
+
     return redirect(url_for('admin'))
 
 
@@ -264,6 +274,8 @@ def update_settings():
     cycle_interval = request.form.get('cycle_interval', type=int)
     background_color = request.form.get('background_color', '').strip()
     progress_indicator = request.form.get('progress_indicator', '').strip()
+    auto_cleanup_enabled = request.form.get('auto_cleanup_enabled', '').strip()
+    auto_cleanup_days = request.form.get('auto_cleanup_days', type=int)
 
     errors = []
 
@@ -285,11 +297,36 @@ def update_settings():
     else:
         errors.append('Ungültige Fortschrittsanzeige')
 
+    # Validate and update auto cleanup settings
+    if auto_cleanup_enabled in ['true', 'false']:
+        set_setting('auto_cleanup_enabled', auto_cleanup_enabled)
+    else:
+        errors.append('Ungültige Auto-Cleanup-Einstellung')
+
+    if auto_cleanup_days and auto_cleanup_days > 0:
+        set_setting('auto_cleanup_days', auto_cleanup_days)
+    else:
+        errors.append('Ungültige Aufbewahrungsdauer')
+
     if errors:
         for error in errors:
             flash(error, 'error')
     else:
         flash('Einstellungen erfolgreich aktualisiert', 'success')
+
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/cleanup', methods=['POST'])
+@login_required
+def manual_cleanup():
+    """Manually trigger cleanup of old PDF files."""
+    deleted_count = cleanup_old_pdfs(app.config['UPLOAD_FOLDER'])
+
+    if deleted_count > 0:
+        flash(f'{deleted_count} alte Datei(en) erfolgreich gelöscht', 'success')
+    else:
+        flash('Keine alten Dateien zum Löschen gefunden', 'info')
 
     return redirect(url_for('admin'))
 
