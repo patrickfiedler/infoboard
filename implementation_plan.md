@@ -252,6 +252,29 @@ Gallery images are stored separately from the regular media library (no clutter)
 
 ---
 
+## Phase 1h: Remove cycle_interval from UI
+
+### Goal
+Simplify the mental model: playlists are the single workflow for duration control.
+The "Seitenwechsel" setting is confusing because it is ignored in playlist mode and
+only applies to PDFs/galleries in single-item (no-playlist) mode. Remove it from
+the visible settings; keep the DB column and API field as a silent 10s fallback.
+
+### What changed
+- [x] `admin.html`: removed `cycle_interval` input from display settings form;
+  Hintergrundfarbe, Fortschrittsanzeige, Videoskalierung merged into one row
+- [x] `app.py`: `update_display_settings` no longer reads, validates, or writes
+  `cycle_interval` from the form; existing DB value is preserved unchanged
+- Display API still sends `cycle_interval` (always 10) to `display.html` as fallback
+  for single-item PDF mode — no change needed there
+
+### What was NOT changed
+- `cycle_interval` column stays in DB (default 10s) — no migration needed
+- Single-item fallback still works (auto-newest PDF shows each page for 10s)
+- No code removed from display.html or models.py
+
+---
+
 ## Phase 2: Smart TV Optimization
 
 ### Goal
@@ -315,7 +338,7 @@ Proposed layouts:
 ---
 
 ## Status
-**Phases 1–1g complete. Phase 2 (Smart TV) when hardware available.**
+**Phases 1–1h complete. Phase 2 (Smart TV) when hardware available.**
 
 ## Decisions Made
 - PDF pre-rendering: one PNG per page per display, stored in `renders/<display_id>/` directory

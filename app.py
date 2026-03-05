@@ -541,7 +541,6 @@ def update_display_settings(display_id):
     name = request.form.get('name', '').strip()
     width = request.form.get('width', type=int)
     height = request.form.get('height', type=int)
-    cycle_interval = request.form.get('cycle_interval', type=int)
     background_color = request.form.get('background_color', '').strip()
     progress_indicator = request.form.get('progress_indicator', '').strip()
     video_fit = request.form.get('video_fit', '').strip()
@@ -553,8 +552,6 @@ def update_display_settings(display_id):
         errors.append('Ungültige Breite')
     if not height or height < 1:
         errors.append('Ungültige Höhe')
-    if not cycle_interval or cycle_interval < 1:
-        errors.append('Ungültiges Wechselintervall')
     if not (background_color and len(background_color) == 7 and background_color.startswith('#')):
         errors.append('Ungültige Hintergrundfarbe')
     if progress_indicator not in ('progress', 'subtle', 'countdown', 'none'):
@@ -570,7 +567,7 @@ def update_display_settings(display_id):
     resolution_changed = (width != display['width'] or height != display['height'])
 
     update_display(display_id, name=name, width=width, height=height,
-                   cycle_interval=cycle_interval, background_color=background_color,
+                   background_color=background_color,
                    progress_indicator=progress_indicator, video_fit=video_fit)
 
     if resolution_changed:
