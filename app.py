@@ -531,7 +531,7 @@ def update_display_settings(display_id):
         errors.append('Ungültiges Wechselintervall')
     if not (background_color and len(background_color) == 7 and background_color.startswith('#')):
         errors.append('Ungültige Hintergrundfarbe')
-    if progress_indicator not in ('progress', 'countdown', 'none'):
+    if progress_indicator not in ('progress', 'subtle', 'countdown', 'none'):
         errors.append('Ungültige Fortschrittsanzeige')
     if video_fit not in ('contain', 'cover'):
         errors.append('Ungültige Videoskalierung')

@@ -274,6 +274,7 @@
                                 <label>Fortschrittsanzeige (PDF)</label>
                                 <select name="progress_indicator" required>
                                     <option value="progress"  {% if d.progress_indicator == 'progress'  %}selected{% endif %}>Fortschrittsbalken</option>
+                                    <option value="subtle"    {% if d.progress_indicator == 'subtle'    %}selected{% endif %}>Dezenter Balken</option>
                                     <option value="countdown" {% if d.progress_indicator == 'countdown' %}selected{% endif %}>Countdown</option>
                                     <option value="none"      {% if d.progress_indicator == 'none'      %}selected{% endif %}>Keine</option>
                                 </select>

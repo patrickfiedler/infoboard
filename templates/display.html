@@ -118,7 +118,7 @@
             height: 100%;
             background: rgba(100, 100, 100, 0.5);
             width: 0%;
-            transition: width 0.3s ease;
+            transition: width 1s linear;
             border-radius: 2px;
         }
 
@@ -128,6 +128,23 @@
             font-weight: 400;
             white-space: nowrap;
         }
+
+        /* Subtle: flush 2px bar, no background track, no text */
+        #progress-container.subtle {
+            background: transparent;
+            padding: 0;
+        }
+        #progress-container.subtle #progress-bar-bg {
+            height: 2px;
+            background: rgba(180, 180, 180, 0.12);
+            border-radius: 0;
+        }
+        #progress-container.subtle #progress-bar-fill {
+            background: rgba(120, 120, 120, 0.35);
+            border-radius: 0;
+            transition: width 1s linear;
+        }
+        #progress-container.subtle #page-indicator { display: none; }
     </style>
 </head>
 <body>
@@ -271,6 +288,8 @@
         function updateProgress() {
             var total = slides.length;
             var finite = isFinite(currentSlideDuration);
+            progressContainer.classList.remove('subtle');
+
             if (total <= 1 || !finite) {
                 countdownDiv.style.display = 'none';
                 progressContainer.style.display = 'none';
@@ -280,8 +299,9 @@
                 countdownDiv.textContent = countdownSeconds + 's';
                 countdownDiv.style.display = 'block';
                 progressContainer.style.display = 'none';
-            } else if (progressIndicator === 'progress') {
-                pageIndicator.textContent = (slideIndex + 1) + ' / ' + total;
+            } else if (progressIndicator === 'progress' || progressIndicator === 'subtle') {
+                if (progressIndicator === 'subtle') progressContainer.classList.add('subtle');
+                if (progressIndicator === 'progress') pageIndicator.textContent = (slideIndex + 1) + ' / ' + total;
                 progressBarFill.style.width = ((elapsedSeconds / currentSlideDuration) * 100) + '%';
                 countdownDiv.style.display = 'none';
                 progressContainer.style.display = 'block';
