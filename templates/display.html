@@ -305,7 +305,7 @@
             } else if (progressIndicator === 'progress' || progressIndicator === 'subtle') {
                 if (progressIndicator === 'subtle') progressContainer.classList.add('subtle');
                 if (progressIndicator === 'progress') pageIndicator.textContent = (slideIndex + 1) + ' / ' + total;
-                progressBarFill.style.transform = 'scaleX(' + (elapsedSeconds / currentSlideDuration) + ')';
+                progressBarFill.style.transform = 'scaleX(' + ((elapsedSeconds + 1) / currentSlideDuration) + ')';
                 countdownDiv.style.display = 'none';
                 progressContainer.style.display = 'block';
             } else {
