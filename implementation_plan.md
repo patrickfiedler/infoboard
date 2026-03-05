@@ -187,6 +187,31 @@ for a configurable duration. Managed from an intuitive admin UI per display.
 
 ---
 
+## Phase 1f: Drag-and-Drop Playlist Editor
+
+### Goal
+Replace the toggle-hidden playlist panel and ↑/↓ move buttons with an always-visible
+2-column admin layout (settings | playlist) and SortableJS drag-and-drop reordering.
+All playlist mutations are AJAX — the page never reloads.
+
+### Backend
+- [x] `models.py`: `add_playlist_item` returns `lastrowid`; new `reorder_playlist_items(display_id, ordered_ids)`
+- [x] `app.py`: `playlist_add` returns JSON `{ok, id, original_name, content_type, duration}` for AJAX callers
+- [x] `app.py`: `playlist_remove` and `playlist_update_dur` return JSON `{ok}` for AJAX callers
+- [x] `app.py`: new `POST /admin/display/<id>/playlist/reorder` route
+
+### Frontend
+- [x] `static/js/sortable.min.js` — SortableJS library (downloaded from jsDelivr)
+- [x] `admin.html`: display cards are now full-width with a permanent 2-column layout
+  - Left column: Einstellungen (settings form, always visible)
+  - Right column: Playlist (table + add form, always visible)
+- [x] Playlist rows have `☰` drag handles; SortableJS fires reorder POST on drop
+- [x] Duration input saves on `change` with green/red border flash (no button needed)
+- [x] ✕ button removes row via AJAX without reload
+- [x] "Hinzufügen" form appends new row via AJAX without reload
+
+---
+
 ## Phase 2: Smart TV Optimization
 
 ### Goal
@@ -250,8 +275,7 @@ Proposed layouts:
 ---
 
 ## Status
-**Phase 1 + 1b complete. Phase 2 (Smart TV) when hardware available.**
-Phase 2 (Smart TV testing) when hardware is available.
+**Phases 1–1f complete. Phase 2 (Smart TV) when hardware available.**
 
 ## Decisions Made
 - PDF pre-rendering: one PNG per page per display, stored in `renders/<display_id>/` directory
