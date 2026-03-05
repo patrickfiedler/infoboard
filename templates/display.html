@@ -307,7 +307,9 @@
 
             } else if (ct === 'url') {
                 var iframe = document.createElement('iframe');
-                iframe.src = '/proxy?url=' + encodeURIComponent(data.url);
+                var proxySrc = '/proxy?url=' + encodeURIComponent(data.url);
+                if (data.scale_to_fit) proxySrc += '&scale=fit';
+                iframe.src = proxySrc;
                 iframe.allow = 'autoplay; fullscreen';
                 iframe.onload = function() { loadingDiv.style.display = 'none'; };
                 container.appendChild(iframe);

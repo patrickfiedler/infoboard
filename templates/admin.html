@@ -326,6 +326,12 @@
                         <input type="url" name="url" placeholder="https://..." required>
                     </div>
                     <div>
+                        <label style="white-space:nowrap;">
+                            <input type="checkbox" name="scale_to_fit" style="width:auto;margin-right:4px;">
+                            Skalierung
+                        </label>
+                    </div>
+                    <div>
                         <label>&nbsp;</label>
                         <button type="submit">Hinzufügen</button>
                     </div>
@@ -396,6 +402,12 @@
                                     <a href="{{ url_for('serve_upload', filename=item.filename) }}"
                                        download="{{ item.original_name }}"
                                        class="btn btn-sm btn-info">↓</a>
+                                {% endif %}
+                                {% if item.content_type == 'url' %}
+                                    <form method="POST" action="{{ url_for('toggle_scale_to_fit', media_id=item.id) }}">
+                                        <button type="submit" class="btn-sm {% if item.scale_to_fit %}btn-success{% else %}btn-secondary{% endif %}"
+                                                title="Auf Viewport skalieren">Skalierung {% if item.scale_to_fit %}an{% else %}aus{% endif %}</button>
+                                    </form>
                                 {% endif %}
                                 <form method="POST" action="{{ url_for('delete_media_item', media_id=item.id) }}"
                                       onsubmit="return confirm('&quot;{{ item.original_name }}&quot; wirklich löschen?');">

@@ -21,6 +21,7 @@ from models import (
     delete_pdf_renders_for_display,
     cleanup_old_media,
     get_url_media_by_url,
+    update_media_scale_to_fit,
 )
 
 app = Flask(__name__)
@@ -31,6 +32,23 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB
 RENDERS_FOLDER = 'renders'
 
 COOKIE_HIDE_CSS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookie_hide.conf')
+
+# JS injected when scale-to-fit is requested: scales the page to fill the iframe viewport.
+PROXY_SCALE_JS = """<script>
+(function() {
+    function scaleToFit() {
+        var vw = window.innerWidth;
+        var pw = document.documentElement.scrollWidth;
+        if (!pw || pw === vw) return;
+        var scale = vw / pw;
+        document.documentElement.style.transformOrigin = '0 0';
+        document.documentElement.style.transform = 'scale(' + scale + ')';
+        document.body.style.overflow = 'hidden';
+    }
+    window.addEventListener('load', scaleToFit);
+    window.addEventListener('resize', scaleToFit);
+})();
+</script>"""
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(RENDERS_FOLDER, exist_ok=True)
@@ -215,6 +233,8 @@ def display_api(slug):
         response['url'] = url_for('serve_upload', filename=media['filename'])
     else:  # youtube, url
         response['url'] = media['url']
+        if media['content_type'] == 'url':
+            response['scale_to_fit'] = bool(media['scale_to_fit'])
 
     return jsonify(response)
 
@@ -260,13 +280,14 @@ def proxy():
 
     ct = resp.headers.get('content-type', 'text/html')
 
-    # For HTML: inject <base href> + cookie-hiding CSS (loaded fresh so edits take effect without restart)
+    # For HTML: inject <base href>, cookie-hiding CSS, and optionally scale-to-fit JS
     if 'text/html' in ct:
         try:
             cookie_css = f'<style>{open(COOKIE_HIDE_CSS_FILE).read()}</style>'
         except OSError:
             cookie_css = ''
-        inject = f'<base href="{url}">' + cookie_css
+        scale_js = PROXY_SCALE_JS if request.args.get('scale') == 'fit' else ''
+        inject = f'<base href="{url}">' + cookie_css + scale_js
         html = resp.text
         if re.search(r'<head', html, re.IGNORECASE):
             html = re.sub(r'(<head[^>]*>)', lambda m: m.group(1) + inject,
@@ -626,9 +647,21 @@ def add_url():
 
     content_type = detect_url_content_type(raw_url)
     final_url = make_youtube_embed(raw_url) if content_type == 'youtube' else raw_url
+    scale_to_fit = content_type == 'url' and 'scale_to_fit' in request.form
 
-    add_media(content_type, name, url=final_url)
+    add_media(content_type, name, url=final_url, scale_to_fit=scale_to_fit)
     flash(f'"{name}" erfolgreich hinzugefügt', 'success')
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/media/<int:media_id>/toggle-scale', methods=['POST'])
+@login_required
+def toggle_scale_to_fit(media_id):
+    media = get_media(media_id)
+    if not media or media['content_type'] != 'url':
+        flash('Inhalt nicht gefunden oder kein Website-Typ', 'error')
+        return redirect(url_for('admin'))
+    update_media_scale_to_fit(media_id, not media['scale_to_fit'])
     return redirect(url_for('admin'))
 
 

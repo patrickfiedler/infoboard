@@ -53,9 +53,16 @@ def init_db():
                 original_name TEXT NOT NULL,
                 url TEXT,
                 upload_date TIMESTAMP NOT NULL,
-                file_size INTEGER NOT NULL DEFAULT 0
+                file_size INTEGER NOT NULL DEFAULT 0,
+                scale_to_fit INTEGER NOT NULL DEFAULT 0
             )
         ''')
+
+        # Migrate: add scale_to_fit column if upgrading from older schema
+        try:
+            conn.execute("ALTER TABLE media_items ADD COLUMN scale_to_fit INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass  # Column already exists
 
         conn.execute('''
             CREATE TABLE IF NOT EXISTS pdf_renders (
@@ -206,13 +213,13 @@ def delete_display(display_id):
 
 # ---------- media items ----------
 
-def add_media(content_type, original_name, filename=None, url=None, file_size=0):
+def add_media(content_type, original_name, filename=None, url=None, file_size=0, scale_to_fit=False):
     with get_db() as conn:
         conn.execute(
             '''INSERT INTO media_items
-               (content_type, filename, original_name, url, upload_date, file_size)
-               VALUES (?, ?, ?, ?, ?, ?)''',
-            (content_type, filename, original_name, url, datetime.now(), file_size)
+               (content_type, filename, original_name, url, upload_date, file_size, scale_to_fit)
+               VALUES (?, ?, ?, ?, ?, ?, ?)''',
+            (content_type, filename, original_name, url, datetime.now(), file_size, 1 if scale_to_fit else 0)
         )
         return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
 
@@ -261,6 +268,14 @@ def get_newest_media():
         return conn.execute(
             'SELECT * FROM media_items ORDER BY upload_date DESC LIMIT 1'
         ).fetchone()
+
+
+def update_media_scale_to_fit(media_id, scale_to_fit):
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE media_items SET scale_to_fit = ? WHERE id = ?',
+            (1 if scale_to_fit else 0, media_id)
+        )
 
 
 def update_media_name(media_id, new_name):

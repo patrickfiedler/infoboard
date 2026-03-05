@@ -125,6 +125,40 @@ Approaches B and C are only needed if proxied content is genuinely gated behind 
 
 ---
 
+## Phase 1d: Scale-to-Fit for Proxied Websites
+
+### Goal
+Allow non-responsive websites to be scaled down (or up) to fill the display viewport,
+so the full page width is always visible without horizontal scrollbars.
+
+### How it works
+When scale-to-fit is enabled for a URL media item, the display page requests
+`/proxy?url=...&scale=fit`. The proxy injects a small JS snippet that runs after
+page load, measures the page's natural width (`scrollWidth`), calculates
+`scale = viewportWidth / scrollWidth`, and applies `transform: scale(scale)` to
+the root element. This is essentially browser zoom-to-fit, done automatically.
+
+### Why per-URL opt-in
+Responsive sites already adapt to viewport width — applying scale to them would
+distort the layout. The flag is stored per media item and defaults to off.
+
+### Backend
+- [x] `migrations/0003_add_scale_to_fit.py` — add `scale_to_fit INTEGER DEFAULT 0` to `media_items`
+- [x] `models.py`: `add_media` accepts `scale_to_fit`; new `update_media_scale_to_fit()`
+- [x] `app.py`: `/proxy` injects scale JS when `?scale=fit` param is present
+- [x] `app.py`: `add_url` route reads `scale_to_fit` checkbox
+- [x] `app.py`: `POST /admin/media/<id>/toggle-scale` — toggles flag for existing items
+- [x] `app.py`: display API returns `scale_to_fit` for `url`-type items
+
+### Frontend
+- [x] `display.html`: appends `&scale=fit` to proxy URL when `data.scale_to_fit` is true
+- [x] `admin.html`: checkbox on URL-add form; toggle button on existing `url`-type items
+
+### Migration
+- [x] `migrations/0003_add_scale_to_fit.py`
+
+---
+
 ## Phase 2: Smart TV Optimization
 
 ### Goal
