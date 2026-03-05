@@ -30,6 +30,46 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB
 
 RENDERS_FOLDER = 'renders'
 
+# CSS injected into proxied HTML pages to hide cookie consent banners.
+# Add site-specific selectors here as needed.
+PROXY_COOKIE_HIDE_CSS = """<style>
+/* Cookie consent banner hiding (Phase 1c) */
+/* --- Site-specific --- */
+#cookie-consent, .cookie-consent-container,
+/* --- OneTrust --- */
+#onetrust-banner-sdk, #onetrust-consent-sdk, .onetrust-pc-dark-filter,
+/* --- CookieBot --- */
+#CybotCookiebotDialog, #CybotCookiebotDialogBodyUnderlay, .CybotCookiebotFader,
+/* --- Quantcast --- */
+#qc-cmp2-container,
+/* --- Didomi --- */
+#didomi-host, .didomi-popup-backdrop,
+/* --- CookieConsent.js --- */
+.cc-window, .cc-banner,
+/* --- CookieYes --- */
+.cky-consent-container, .cky-overlay,
+/* --- Borlabs --- */
+#BorlabsCookieBox,
+/* --- TrustArc --- */
+#truste-consent-track,
+/* --- Iubenda --- */
+#iubenda-cs-banner,
+/* --- Osano --- */
+.osano-cm-window,
+/* --- Complianz --- */
+#cmplz-cookiebanner-container,
+/* --- Cookie Law Info / WPML --- */
+#cookie-law-info-bar,
+/* --- Termly --- */
+#termly-code-snippet-support,
+/* --- Generic patterns --- */
+#cookie-notice, .cookie-notice,
+#cookie-banner, .cookie-banner,
+#cookiebanner, .cookiebanner,
+#cookie-overlay, .cookie-overlay
+{ display: none !important; }
+</style>"""
+
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(RENDERS_FOLDER, exist_ok=True)
 
@@ -258,15 +298,15 @@ def proxy():
 
     ct = resp.headers.get('content-type', 'text/html')
 
-    # For HTML: inject <base href> so relative links/assets resolve against the origin
+    # For HTML: inject <base href> + cookie-hiding CSS
     if 'text/html' in ct:
-        base_tag = f'<base href="{url}">'
+        inject = f'<base href="{url}">' + PROXY_COOKIE_HIDE_CSS
         html = resp.text
         if re.search(r'<head', html, re.IGNORECASE):
-            html = re.sub(r'(<head[^>]*>)', lambda m: m.group(1) + base_tag,
+            html = re.sub(r'(<head[^>]*>)', lambda m: m.group(1) + inject,
                           html, count=1, flags=re.IGNORECASE)
         else:
-            html = base_tag + html
+            html = inject + html
         content = html.encode('utf-8', errors='replace')
         ct = 'text/html; charset=utf-8'
     else:

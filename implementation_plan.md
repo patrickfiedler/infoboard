@@ -80,6 +80,51 @@ Allow websites to be embedded in the display iframe by fetching them server-side
 
 ---
 
+## Phase 1c: Cookie Banner Suppression
+
+### Goal
+Prevent cookie consent overlays from blocking the display view on proxied websites.
+
+### Approaches (in order of complexity)
+
+#### A — CSS hiding (implemented)
+Inject a `<style>` block into proxied HTML that hides known cookie banner elements by
+CSS selector. The banner disappears visually; the site doesn't know consent was given,
+but for an unattended display screen that doesn't matter.
+- Pro: simple, no JS needed, works for all major CMPs
+- Con: requires adding selectors for unusual/custom banners per site
+
+Covered CMPs: OneTrust, CookieBot, Quantcast, Didomi, CookieConsent.js, CookieYes,
+Borlabs, TrustArc, Iubenda, Osano, Complianz, Cookie Law Info, Termly, plus generic
+`#cookie-banner`, `#cookie-notice`, `#cookie-consent` patterns.
+
+To add a site-specific selector: extend `PROXY_COOKIE_HIDE_CSS` in `app.py`.
+
+#### B — Manual cookie paste (not implemented)
+Admin copies cookies from browser DevTools → pastes into input field in admin panel →
+stored in DB per URL → proxy forwards them as `Cookie:` header upstream.
+- Pro: actually accepts cookies, works for sites with content behind consent wall
+- Con: manual, cookies expire and need refreshing
+
+#### C — Playwright headless browser (not implemented)
+Server runs a real browser session; admin interacts with it remotely (or it auto-clicks
+consent); resulting cookies stored server-side and reused for proxy fetches.
+- Pro: most robust, handles any site including JS-only banners
+- Con: heavy dependency, complex setup
+
+### Why CSS hiding is right for digital signage
+Approaches B and C are only needed if proxied content is genuinely gated behind consent
+(e.g. paywalls). For display-only use, visually hiding the overlay is sufficient.
+
+### Backend
+- [x] `PROXY_COOKIE_HIDE_CSS` constant in `app.py` with selectors for major CMPs
+- [x] Proxy route injects CSS block into HTML responses
+
+### Migration
+- No DB change needed
+
+---
+
 ## Phase 2: Smart TV Optimization
 
 ### Goal
