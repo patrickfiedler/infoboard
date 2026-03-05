@@ -22,6 +22,8 @@ from models import (
     cleanup_old_media,
     get_url_media_by_url,
     update_media_scale_to_fit,
+    get_playlist_items, add_playlist_item, remove_playlist_item,
+    update_playlist_item_duration, move_playlist_item,
 )
 
 app = Flask(__name__)
@@ -201,6 +203,26 @@ def display_by_slug(slug):
     return render_template('display.html', slug=slug)
 
 
+def _media_to_item(media, display):
+    """Serialize a media item for the display API (used in both single and playlist mode)."""
+    item = {'content_type': media['content_type'], 'original_name': media['original_name']}
+    if media['content_type'] == 'pdf':
+        renders = get_pdf_renders(media['id'], display['id'])
+        item['pages'] = [
+            url_for('serve_render', display_id=display['id'], filename=r['render_filename'])
+            for r in renders
+        ]
+    elif media['content_type'] in ('image', 'video'):
+        item['url'] = url_for('serve_upload', filename=media['filename'])
+        if media['content_type'] == 'video':
+            item['video_fit'] = display['video_fit'] or 'contain'
+    else:  # youtube, url
+        item['url'] = media['url']
+        if media['content_type'] == 'url':
+            item['scale_to_fit'] = bool(media['scale_to_fit'])
+    return item
+
+
 @app.route('/api/display/<slug>')
 def display_api(slug):
     """API endpoint: current content info for a display."""
@@ -208,34 +230,37 @@ def display_api(slug):
     if not display:
         return jsonify({'error': 'Display nicht gefunden'}), 404
 
+    common = {
+        'background_color': display['background_color'],
+        'progress_indicator': display['progress_indicator'],
+    }
+
+    # --- Playlist mode ---
+    playlist = get_playlist_items(display['id'])
+    if playlist:
+        items = []
+        for pi in playlist:
+            media = get_media(pi['media_id'])
+            if not media:
+                continue
+            item = _media_to_item(media, display)
+            item['duration'] = pi['duration']
+            items.append(item)
+        if items:
+            return jsonify({**common, 'mode': 'playlist', 'items': items})
+
+    # --- Single item mode ---
     selected_id = display['selected_media_id']
     media = get_newest_media() if selected_id == 0 else get_media(selected_id)
-
     if not media:
         return jsonify({'error': 'Kein Inhalt verfügbar'}), 404
 
     response = {
-        'content_type': media['content_type'],
-        'original_name': media['original_name'],
+        **common,
         'cycle_interval': display['cycle_interval'],
-        'background_color': display['background_color'],
-        'progress_indicator': display['progress_indicator'],
-        'video_fit': display['video_fit'] if display['video_fit'] else 'contain',
+        'video_fit': display['video_fit'] or 'contain',
+        **_media_to_item(media, display),
     }
-
-    if media['content_type'] == 'pdf':
-        renders = get_pdf_renders(media['id'], display['id'])
-        response['pages'] = [
-            url_for('serve_render', display_id=display['id'], filename=r['render_filename'])
-            for r in renders
-        ]
-    elif media['content_type'] in ('image', 'video'):
-        response['url'] = url_for('serve_upload', filename=media['filename'])
-    else:  # youtube, url
-        response['url'] = media['url']
-        if media['content_type'] == 'url':
-            response['scale_to_fit'] = bool(media['scale_to_fit'])
-
     return jsonify(response)
 
 
@@ -380,10 +405,15 @@ def admin():
     auto_cleanup_enabled = get_setting('auto_cleanup_enabled', 'true')
     auto_cleanup_days = int(get_setting('auto_cleanup_days', '180'))
 
+    display_playlists = {d['id']: get_playlist_items(d['id']) for d in displays}
+    all_media = get_all_media()  # unpaginated, for playlist dropdowns
+
     return render_template(
         'admin.html',
         displays=displays,
         display_current=display_current,
+        display_playlists=display_playlists,
+        all_media=all_media,
         media_list=media_list,
         page=page,
         total_pages=total_pages,
@@ -548,6 +578,49 @@ def select_newest_for_display(display_id):
 
     update_display(display_id, selected_media_id=0)
     flash(f'"{display["name"]}" zeigt jetzt den neuesten Inhalt', 'success')
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/display/<int:display_id>/playlist/add', methods=['POST'])
+@login_required
+def playlist_add(display_id):
+    if not get_display(display_id):
+        flash('Display nicht gefunden', 'error')
+        return redirect(url_for('admin'))
+    media_id = request.form.get('media_id', type=int)
+    duration = max(1, request.form.get('duration', 10, type=int))
+    if not media_id or not get_media(media_id):
+        flash('Inhalt nicht gefunden', 'error')
+        return redirect(url_for('admin'))
+    add_playlist_item(display_id, media_id, duration)
+    flash('Inhalt zur Playlist hinzugefügt', 'success')
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/display/<int:display_id>/playlist/item/<int:item_id>/remove', methods=['POST'])
+@login_required
+def playlist_remove(display_id, item_id):
+    remove_playlist_item(item_id, display_id)
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/display/<int:display_id>/playlist/item/<int:item_id>/duration', methods=['POST'])
+@login_required
+def playlist_update_dur(display_id, item_id):
+    duration = request.form.get('duration', type=int)
+    if not duration or duration < 1:
+        flash('Ungültige Dauer', 'error')
+        return redirect(url_for('admin'))
+    update_playlist_item_duration(item_id, display_id, duration)
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/display/<int:display_id>/playlist/item/<int:item_id>/move/<direction>', methods=['POST'])
+@login_required
+def playlist_move_item(display_id, item_id, direction):
+    if direction not in ('up', 'down'):
+        abort(400)
+    move_playlist_item(item_id, display_id, -1 if direction == 'up' else 1)
     return redirect(url_for('admin'))
 
 

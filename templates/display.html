@@ -159,22 +159,67 @@
         const progressBarFill = document.getElementById('progress-bar-fill');
         const pageIndicator = document.getElementById('page-indicator');
 
-        // State
-        let pages = [];
-        let currentPage = 0;
-        let cycleInterval = 10;
-        let progressIndicator = 'progress';
-        let videoFit = 'contain';
-        let cycleTimer = null;
-        let countdownTimer = null;
-        let elapsedSeconds = 0;
-        let countdownSeconds = 0;
-        let currentStateKey = null;
+        // --- State ---
+        var slides = [];           // flat array of slide objects (see buildSlides)
+        var slideIndex = 0;
+        var slideTimer = null;     // setTimeout for advancing to next slide
+        var countdownTimer = null; // setInterval for progress display
+        var elapsedSeconds = 0;
+        var countdownSeconds = 0;
+        var currentSlideDuration = 0;
+        var progressIndicator = 'progress';
+        var currentStateKey = null;
+
+        // A slide: { type, url, duration, video_fit, scale_to_fit }
+        // duration = seconds (Infinity = show until content changes, e.g. single non-PDF item)
+
+        function buildSlides(data) {
+            if (data.mode === 'playlist') {
+                var result = [];
+                (data.items || []).forEach(function(item) {
+                    var dur = Math.max(1, item.duration || 10);
+                    if (item.content_type === 'pdf') {
+                        var pages = item.pages || [];
+                        if (!pages.length) return;
+                        var timePerPage = Math.max(1, Math.floor(dur / pages.length));
+                        pages.forEach(function(url) {
+                            result.push({ type: 'pdf-page', url: url, duration: timePerPage });
+                        });
+                    } else {
+                        result.push({
+                            type: item.content_type, url: item.url, duration: dur,
+                            video_fit: item.video_fit || 'contain',
+                            scale_to_fit: item.scale_to_fit || false,
+                        });
+                    }
+                });
+                return result;
+            }
+            // Single-item mode
+            var ct = data.content_type;
+            var interval = data.cycle_interval || 10;
+            if (ct === 'pdf') {
+                return (data.pages || []).map(function(url) {
+                    return { type: 'pdf-page', url: url, duration: interval };
+                });
+            }
+            return [{ type: ct, url: data.url, duration: Infinity,
+                      video_fit: data.video_fit || 'contain',
+                      scale_to_fit: data.scale_to_fit || false }];
+        }
 
         function getStateKey(data) {
-            if (data.content_type === 'pdf') return 'pdf:' + (data.pages && data.pages[0] || '');
+            if (data.mode === 'playlist') {
+                return 'playlist:' + (data.items || []).map(function(i) {
+                    return (i.content_type || '') + ':' + (i.url || (i.pages && i.pages[0]) || '') + ':' + i.duration;
+                }).join('|');
+            }
+            if (data.content_type === 'pdf')
+                return 'pdf:' + data.cycle_interval + ':' + ((data.pages && data.pages[0]) || '');
             return (data.content_type || '') + ':' + (data.url || '');
         }
+
+        // --- Rendering ---
 
         function showError(msg) {
             loadingDiv.style.display = 'none';
@@ -182,14 +227,51 @@
             errorDiv.style.display = 'block';
         }
 
-        function clearError() {
+        function renderSlide(slide) {
+            container.innerHTML = '';
             errorDiv.style.display = 'none';
+            loadingDiv.style.display = 'block';
+
+            if (slide.type === 'pdf-page' || slide.type === 'image') {
+                var img = document.createElement('img');
+                img.src = slide.url;
+                img.onload = function() { loadingDiv.style.display = 'none'; };
+                img.onerror = function() { showError('Bild konnte nicht geladen werden'); };
+                container.appendChild(img);
+
+            } else if (slide.type === 'video') {
+                var video = document.createElement('video');
+                video.src = slide.url;
+                video.autoplay = true; video.loop = true; video.muted = true; video.playsInline = true;
+                video.style.objectFit = slide.video_fit || 'contain';
+                video.oncanplay = function() { loadingDiv.style.display = 'none'; };
+                video.onerror = function() { showError('Video konnte nicht geladen werden'); };
+                container.appendChild(video);
+
+            } else if (slide.type === 'youtube') {
+                var iframe = document.createElement('iframe');
+                iframe.src = slide.url;
+                iframe.allow = 'autoplay; fullscreen';
+                iframe.onload = function() { loadingDiv.style.display = 'none'; };
+                container.appendChild(iframe);
+
+            } else if (slide.type === 'url') {
+                var iframe = document.createElement('iframe');
+                var src = '/proxy?url=' + encodeURIComponent(slide.url);
+                if (slide.scale_to_fit) src += '&scale=fit';
+                iframe.src = src;
+                iframe.allow = 'autoplay; fullscreen';
+                iframe.onload = function() { loadingDiv.style.display = 'none'; };
+                container.appendChild(iframe);
+            }
         }
 
         // --- Progress indicator ---
 
         function updateProgress() {
-            if (pages.length <= 1) {
+            var total = slides.length;
+            var finite = isFinite(currentSlideDuration);
+            if (total <= 1 || !finite) {
                 countdownDiv.style.display = 'none';
                 progressContainer.style.display = 'none';
                 return;
@@ -199,8 +281,8 @@
                 countdownDiv.style.display = 'block';
                 progressContainer.style.display = 'none';
             } else if (progressIndicator === 'progress') {
-                pageIndicator.textContent = 'Seite ' + (currentPage + 1) + '/' + pages.length;
-                progressBarFill.style.width = ((elapsedSeconds / cycleInterval) * 100) + '%';
+                pageIndicator.textContent = (slideIndex + 1) + ' / ' + total;
+                progressBarFill.style.width = ((elapsedSeconds / currentSlideDuration) * 100) + '%';
                 countdownDiv.style.display = 'none';
                 progressContainer.style.display = 'block';
             } else {
@@ -209,9 +291,25 @@
             }
         }
 
-        function startProgress() {
-            if (countdownTimer) clearInterval(countdownTimer);
-            countdownSeconds = cycleInterval;
+        // --- Slide cycling ---
+
+        function stopAll() {
+            if (slideTimer)    { clearTimeout(slideTimer);  slideTimer = null; }
+            if (countdownTimer){ clearInterval(countdownTimer); countdownTimer = null; }
+            countdownDiv.style.display = 'none';
+            progressContainer.style.display = 'none';
+        }
+
+        function startSlide(index) {
+            stopAll();
+            if (!slides.length) return;
+            slideIndex = index % slides.length;
+            var slide = slides[slideIndex];
+            renderSlide(slide);
+            if (slides.length <= 1 || !isFinite(slide.duration)) return;
+
+            currentSlideDuration = slide.duration;
+            countdownSeconds = slide.duration;
             elapsedSeconds = 0;
             updateProgress();
             countdownTimer = setInterval(function() {
@@ -219,101 +317,9 @@
                 elapsedSeconds++;
                 updateProgress();
             }, 1000);
-        }
-
-        function stopProgress() {
-            if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-            countdownDiv.style.display = 'none';
-            progressContainer.style.display = 'none';
-        }
-
-        // --- Page cycling (PDF only) ---
-
-        function showPage(index) {
-            container.innerHTML = '';
-            if (!pages[index]) return;
-            var img = document.createElement('img');
-            img.src = pages[index];
-            img.onload = function() { loadingDiv.style.display = 'none'; };
-            container.appendChild(img);
-        }
-
-        function nextPage() {
-            currentPage = (currentPage + 1) % pages.length;
-            showPage(currentPage);
-            countdownSeconds = cycleInterval;
-            elapsedSeconds = 0;
-            updateProgress();
-        }
-
-        function startCycling() {
-            if (cycleTimer) clearInterval(cycleTimer);
-            if (pages.length > 1) {
-                cycleTimer = setInterval(nextPage, cycleInterval * 1000);
-                startProgress();
-            }
-        }
-
-        function stopCycling() {
-            if (cycleTimer) { clearInterval(cycleTimer); cycleTimer = null; }
-            stopProgress();
-        }
-
-        // --- Content rendering ---
-
-        function renderContent(data) {
-            stopCycling();
-            container.innerHTML = '';
-            clearError();
-            loadingDiv.style.display = 'block';
-
-            var ct = data.content_type;
-
-            if (ct === 'pdf') {
-                pages = data.pages || [];
-                currentPage = 0;
-                if (pages.length === 0) {
-                    showError('Keine gerenderten Seiten gefunden. Bitte PDFs neu rendern.');
-                    return;
-                }
-                showPage(0);
-                if (pages.length > 1) startCycling();
-
-            } else if (ct === 'image') {
-                var img = document.createElement('img');
-                img.src = data.url;
-                img.onload = function() { loadingDiv.style.display = 'none'; };
-                img.onerror = function() { showError('Bild konnte nicht geladen werden'); };
-                container.appendChild(img);
-
-            } else if (ct === 'video') {
-                var video = document.createElement('video');
-                video.src = data.url;
-                video.autoplay = true;
-                video.loop = true;
-                video.muted = true;
-                video.playsInline = true;
-                video.style.objectFit = data.video_fit || 'contain';
-                video.oncanplay = function() { loadingDiv.style.display = 'none'; };
-                video.onerror = function() { showError('Video konnte nicht geladen werden'); };
-                container.appendChild(video);
-
-            } else if (ct === 'youtube') {
-                var iframe = document.createElement('iframe');
-                iframe.src = data.url;
-                iframe.allow = 'autoplay; fullscreen';
-                iframe.onload = function() { loadingDiv.style.display = 'none'; };
-                container.appendChild(iframe);
-
-            } else if (ct === 'url') {
-                var iframe = document.createElement('iframe');
-                var proxySrc = '/proxy?url=' + encodeURIComponent(data.url);
-                if (data.scale_to_fit) proxySrc += '&scale=fit';
-                iframe.src = proxySrc;
-                iframe.allow = 'autoplay; fullscreen';
-                iframe.onload = function() { loadingDiv.style.display = 'none'; };
-                container.appendChild(iframe);
-            }
+            slideTimer = setTimeout(function() {
+                startSlide((slideIndex + 1) % slides.length);
+            }, slide.duration * 1000);
         }
 
         // --- Polling ---
@@ -321,37 +327,27 @@
         function poll() {
             fetch(API_URL)
                 .then(function(r) {
-                    if (!r.ok) throw new Error('Kein Inhalt verfügbar');
+                    if (!r.ok) throw new Error();
                     return r.json();
                 })
                 .then(function(data) {
                     document.body.style.backgroundColor = data.background_color || '#ffffff';
-
-                    var newKey = getStateKey(data);
-                    var newInterval = data.cycle_interval;
                     var newIndicator = data.progress_indicator || 'progress';
+                    var newKey = getStateKey(data);
 
                     if (newKey !== currentStateKey) {
-                        // Content changed — full reload
                         currentStateKey = newKey;
-                        cycleInterval = newInterval;
                         progressIndicator = newIndicator;
-                        renderContent(data);
-                    } else {
-                        // Same content — update settings live
-                        if (newIndicator !== progressIndicator) {
-                            progressIndicator = newIndicator;
-                            updateProgress();
-                        }
-                        if (newInterval !== cycleInterval && cycleTimer) {
-                            cycleInterval = newInterval;
-                            startCycling();
-                        }
+                        var newSlides = buildSlides(data);
+                        if (!newSlides.length) { showError('Kein Inhalt verfügbar'); return; }
+                        slides = newSlides;
+                        startSlide(0);
+                    } else if (newIndicator !== progressIndicator) {
+                        progressIndicator = newIndicator;
+                        updateProgress();
                     }
                 })
-                .catch(function(err) {
-                    showError('Kein Inhalt verfügbar');
-                });
+                .catch(function() { showError('Kein Inhalt verfügbar'); });
         }
 
         poll();

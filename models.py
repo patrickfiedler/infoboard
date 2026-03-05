@@ -75,6 +75,16 @@ def init_db():
             )
         ''')
 
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS playlist_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                display_id INTEGER NOT NULL,
+                media_id INTEGER NOT NULL,
+                duration INTEGER NOT NULL DEFAULT 10,
+                position INTEGER NOT NULL DEFAULT 0
+            )
+        ''')
+
         # Global settings (auto-cleanup only; display settings live in displays table)
         conn.execute('''
             CREATE TABLE IF NOT EXISTS settings (
@@ -208,6 +218,7 @@ def update_display(display_id, **kwargs):
 
 def delete_display(display_id):
     with get_db() as conn:
+        conn.execute('DELETE FROM playlist_items WHERE display_id = ?', (display_id,))
         conn.execute('DELETE FROM displays WHERE id = ?', (display_id,))
 
 
@@ -301,6 +312,7 @@ def delete_media(media_id):
         ).fetchall()
 
         conn.execute('DELETE FROM pdf_renders WHERE media_id = ?', (media_id,))
+        conn.execute('DELETE FROM playlist_items WHERE media_id = ?', (media_id,))
         conn.execute('DELETE FROM media_items WHERE id = ?', (media_id,))
         conn.execute(
             'UPDATE displays SET selected_media_id = 0 WHERE selected_media_id = ?',
@@ -430,3 +442,74 @@ def cleanup_old_media(upload_folder):
                         pass
 
         return deleted_count
+
+
+# ---------- playlists ----------
+
+def get_playlist_items(display_id):
+    """Return ordered playlist items joined with media info."""
+    with get_db() as conn:
+        return conn.execute(
+            '''SELECT pi.id, pi.display_id, pi.media_id, pi.duration, pi.position,
+                      m.content_type, m.original_name, m.filename, m.url, m.scale_to_fit
+               FROM playlist_items pi
+               JOIN media_items m ON pi.media_id = m.id
+               WHERE pi.display_id = ?
+               ORDER BY pi.position''',
+            (display_id,)
+        ).fetchall()
+
+
+def add_playlist_item(display_id, media_id, duration):
+    with get_db() as conn:
+        max_pos = conn.execute(
+            'SELECT COALESCE(MAX(position), 0) FROM playlist_items WHERE display_id = ?',
+            (display_id,)
+        ).fetchone()[0]
+        conn.execute(
+            'INSERT INTO playlist_items (display_id, media_id, duration, position) VALUES (?, ?, ?, ?)',
+            (display_id, media_id, duration, max_pos + 1)
+        )
+
+
+def remove_playlist_item(item_id, display_id):
+    with get_db() as conn:
+        conn.execute(
+            'DELETE FROM playlist_items WHERE id = ? AND display_id = ?',
+            (item_id, display_id)
+        )
+        # Repack positions to stay gapless
+        items = conn.execute(
+            'SELECT id FROM playlist_items WHERE display_id = ? ORDER BY position',
+            (display_id,)
+        ).fetchall()
+        for i, row in enumerate(items, 1):
+            conn.execute('UPDATE playlist_items SET position = ? WHERE id = ?', (i, row['id']))
+
+
+def update_playlist_item_duration(item_id, display_id, duration):
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE playlist_items SET duration = ? WHERE id = ? AND display_id = ?',
+            (duration, item_id, display_id)
+        )
+
+
+def move_playlist_item(item_id, display_id, direction):
+    """Swap item with its neighbour. direction: -1 = up, +1 = down."""
+    with get_db() as conn:
+        items = conn.execute(
+            'SELECT id, position FROM playlist_items WHERE display_id = ? ORDER BY position',
+            (display_id,)
+        ).fetchall()
+        ids = [row['id'] for row in items]
+        if item_id not in ids:
+            return
+        idx = ids.index(item_id)
+        swap_idx = idx + direction
+        if swap_idx < 0 or swap_idx >= len(ids):
+            return
+        pos_a = items[idx]['position']
+        pos_b = items[swap_idx]['position']
+        conn.execute('UPDATE playlist_items SET position = ? WHERE id = ?', (pos_b, ids[idx]))
+        conn.execute('UPDATE playlist_items SET position = ? WHERE id = ?', (pos_a, ids[swap_idx]))

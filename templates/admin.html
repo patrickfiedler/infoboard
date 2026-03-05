@@ -137,6 +137,14 @@
         .display-settings-panel { padding: 14px 16px; border-top: 1px solid #eee; background: #fafafa; display: none; }
         .display-settings-panel .form-row { margin-bottom: 10px; }
 
+        /* Playlist panel */
+        .display-playlist-panel { padding: 14px 16px; border-top: 1px solid #eee; background: #fafafa; display: none; }
+        .playlist-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
+        .playlist-table td { padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: middle; }
+        .playlist-table tr:last-child td { border-bottom: none; }
+        .dur-form { display: flex; gap: 4px; align-items: center; }
+        .dur-form input { width: 60px; padding: 4px 6px; font-size: 13px; border: 1px solid #ddd; border-radius: 4px; }
+
         /* Active media row */
         tr.is-active td { background: #f0fdf4 !important; }
         tr.is-active td:first-child { border-left: 3px solid #28a745; padding-left: 9px; }
@@ -181,6 +189,8 @@
                         </div>
                     </div>
                     <div class="actions">
+                        <button class="btn-sm btn-info" type="button"
+                                onclick="togglePanel('playlist-{{ d.id }}')">Playlist{% if display_playlists.get(d.id) %} ({{ display_playlists[d.id]|length }}){% endif %}</button>
                         <button class="btn-sm btn-secondary" type="button"
                                 onclick="togglePanel('settings-{{ d.id }}')">Einstellungen</button>
                         {% if displays|length > 1 %}
@@ -194,17 +204,26 @@
 
                 <div class="display-card-body">
                     <div class="now-playing">
-                        {% set current = display_current.get(d.id) %}
-                        {% if current %}
-                            <strong>
-                                <span class="badge badge-{{ current.content_type }}" style="font-size:10px;vertical-align:middle;margin-right:5px;">{{ type_labels.get(current.content_type, current.content_type) }}</span>{{ current.original_name }}
-                            </strong>
+                        {% set pl = display_playlists.get(d.id, []) %}
+                        {% if pl %}
+                            <strong>Playlist aktiv &mdash; {{ pl|length }} Einträge</strong>
                             <span class="meta">
-                                {% if d.selected_media_id == 0 %}Automatisch (neuester Inhalt){% else %}Manuell ausgewählt{% endif %}
+                                {% for pi in pl[:3] %}<span class="badge badge-{{ pi.content_type }}" style="font-size:10px;">{{ pi.original_name }}</span> {% endfor %}{% if pl|length > 3 %}…{% endif %}
                                 &nbsp;·&nbsp;<a href="{{ url_for('display_by_slug', slug=d.slug) }}" target="_blank">Vorschau ↗</a>
                             </span>
                         {% else %}
-                            <strong style="color:#999;">Kein Inhalt vorhanden</strong>
+                            {% set current = display_current.get(d.id) %}
+                            {% if current %}
+                                <strong>
+                                    <span class="badge badge-{{ current.content_type }}" style="font-size:10px;vertical-align:middle;margin-right:5px;">{{ type_labels.get(current.content_type, current.content_type) }}</span>{{ current.original_name }}
+                                </strong>
+                                <span class="meta">
+                                    {% if d.selected_media_id == 0 %}Automatisch (neuester Inhalt){% else %}Manuell ausgewählt{% endif %}
+                                    &nbsp;·&nbsp;<a href="{{ url_for('display_by_slug', slug=d.slug) }}" target="_blank">Vorschau ↗</a>
+                                </span>
+                            {% else %}
+                                <strong style="color:#999;">Kein Inhalt vorhanden</strong>
+                            {% endif %}
                         {% endif %}
                     </div>
                     <div class="actions">
@@ -261,6 +280,70 @@
                         </div>
                         <button type="submit" class="btn-success">Speichern</button>
                         <small style="color:#999;margin-left:10px;">Auflösungsänderung rendert alle PDFs neu.</small>
+                    </form>
+                </div>
+                <div class="display-playlist-panel" id="playlist-{{ d.id }}">
+                    {% set pl = display_playlists.get(d.id, []) %}
+                    {% if pl %}
+                    <table class="playlist-table">
+                        <tbody>
+                        {% for pi in pl %}
+                        <tr>
+                            <td style="color:#999;width:24px;">{{ loop.index }}</td>
+                            <td>
+                                <span class="badge badge-{{ pi.content_type }}" style="font-size:10px;">{{ type_labels.get(pi.content_type, pi.content_type) }}</span>
+                                {{ pi.original_name }}
+                            </td>
+                            <td>
+                                <form method="POST" action="{{ url_for('playlist_update_dur', display_id=d.id, item_id=pi.id) }}" class="dur-form">
+                                    <input type="number" name="duration" value="{{ pi.duration }}" min="1">
+                                    <span style="font-size:12px;color:#999;">s</span>
+                                    <button type="submit" class="btn-sm">OK</button>
+                                </form>
+                            </td>
+                            <td>
+                                <div class="actions">
+                                    {% if not loop.first %}
+                                    <form method="POST" action="{{ url_for('playlist_move_item', display_id=d.id, item_id=pi.id, direction='up') }}">
+                                        <button type="submit" class="btn-sm btn-secondary">↑</button>
+                                    </form>
+                                    {% endif %}
+                                    {% if not loop.last %}
+                                    <form method="POST" action="{{ url_for('playlist_move_item', display_id=d.id, item_id=pi.id, direction='down') }}">
+                                        <button type="submit" class="btn-sm btn-secondary">↓</button>
+                                    </form>
+                                    {% endif %}
+                                    <form method="POST" action="{{ url_for('playlist_remove', display_id=d.id, item_id=pi.id) }}">
+                                        <button type="submit" class="btn-sm btn-danger">✕</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p style="color:#999;font-size:13px;margin-bottom:12px;">Noch keine Einträge. Inhalte unten hinzufügen.</p>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('playlist_add', display_id=d.id) }}">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Inhalt</label>
+                                <select name="media_id" required>
+                                    {% for item in all_media %}
+                                    <option value="{{ item.id }}">{{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group form-group-sm">
+                                <label>Dauer (s)</label>
+                                <input type="number" name="duration" value="10" min="1" required>
+                            </div>
+                            <div>
+                                <label>&nbsp;</label>
+                                <button type="submit">Hinzufügen</button>
+                            </div>
+                        </div>
                     </form>
                 </div>
             </div>

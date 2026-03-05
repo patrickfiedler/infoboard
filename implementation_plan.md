@@ -159,6 +159,34 @@ distort the layout. The flag is stored per media item and defaults to off.
 
 ---
 
+## Phase 1e: Playlist Feature
+
+### Goal
+Allow a display to cycle through multiple media items in a defined order, each shown
+for a configurable duration. Managed from an intuitive admin UI per display.
+
+### Design decisions
+- One playlist per display (list of media items with per-item duration in seconds)
+- Playlist takes priority over `selected_media_id`; falls back to single-item mode if no items
+- For PDFs in a playlist: pages are distributed across the item's duration (duration / page count)
+- JS is refactored to a unified "slide" model: everything (PDF pages, images, videos, URLs)
+  is flattened to slides with a duration, driven by one cycle loop — clean and extensible
+
+### Backend
+- [x] `migrations/0004_playlists.py` — create `playlist_items` table
+- [x] `models.py` — `get/add/remove/update/move` for playlist items; cascade on media/display delete
+- [x] `app.py`: display API returns `mode: playlist` + items array when playlist is active
+- [x] `app.py`: routes for add/remove/update duration/move up/move down playlist items
+
+### Frontend
+- [x] `display.html`: unified slide model — buildSlides() flattens API response; one cycle loop
+- [x] `admin.html`: playlist panel per display card (ordered list, duration editable, up/down/remove)
+
+### Migration
+- [x] `migrations/0004_playlists.py`
+
+---
+
 ## Phase 2: Smart TV Optimization
 
 ### Goal
