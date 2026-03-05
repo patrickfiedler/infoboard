@@ -11,7 +11,7 @@ A Flask-based web application for displaying PDF files in a browser with automat
 - **Configurable Settings**: Adjust page cycling interval through the admin panel
 - **Pagination**: Admin panel shows 10 files per page for easy navigation
 - **Auto-selection**: Automatically displays the newest uploaded PDF by default
-- **Local PDF.js**: Includes PDF.js library locally for offline operation
+- **Server-side PDF rendering**: PDFs are pre-rendered to images via poppler-utils
 
 ## Technology Stack
 
@@ -19,7 +19,7 @@ A Flask-based web application for displaying PDF files in a browser with automat
 - **WSGI Server**: Waitress (production-ready WSGI server)
 - **Authentication**: Flask-Login with bcrypt password hashing
 - **Database**: SQLite (for metadata and settings)
-- **PDF Rendering**: PDF.js (local copy)
+- **PDF Rendering**: poppler-utils (pdftoppm, server-side)
 - **Storage**: Local filesystem
 
 ## Quick Start
@@ -146,7 +146,6 @@ kundenstopper/
 ├── CLAUDE.md                   # Project guidance for Claude Code
 ├── LICENSE                     # MIT License
 ├── static/
-│   ├── pdfjs/                 # PDF.js library files
 │   ├── css/                   # Custom CSS files
 │   └── js/                    # Custom JavaScript files
 └── templates/
@@ -166,8 +165,7 @@ kundenstopper/
 ## Browser Compatibility
 
 The application works best with modern browsers that support:
-- HTML5 Canvas
-- PDF.js
+- HTML5
 - ES6 JavaScript
 
 Tested with:
@@ -195,10 +193,6 @@ For more details, see [DEPLOYMENT.md](DEPLOYMENT.md#updating-an-existing-install
 
 ## Troubleshooting
 
-### PDF.js not loading
-- Ensure the `static/pdfjs/build/` directory contains `pdf.min.js` and `pdf.worker.min.js`
-- Check browser console for errors
-
 ### Cannot login
 - Verify the password hash in `config.json` was generated correctly
 - Run `generate_password_hash.py` again if needed
@@ -223,8 +217,6 @@ if __name__ == '__main__':
 ```
 
 ## License
-
-This project uses PDF.js which is licensed under Apache License 2.0.
 
 ## Support
 

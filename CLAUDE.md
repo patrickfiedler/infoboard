@@ -12,7 +12,7 @@ Kundenstopper is a Flask-based web application for displaying PDF files with aut
 - **WSGI Server**: Waitress 3.0 (production server)
 - **Authentication**: Flask-Login 0.6.3 with bcrypt 4.1.2
 - **Database**: SQLite (metadata and settings)
-- **PDF Rendering**: PDF.js v4.0.379 (local copy)
+- **PDF Rendering**: pdftoppm (poppler-utils) — pre-renders PDFs to images server-side, stored in `renders/<display_id>/`
 - **Storage**: Local filesystem
 
 ## Common Commands
@@ -112,13 +112,11 @@ Default settings:
 - `selected_pdf_id`: ID of currently selected PDF (0 = newest)
 - `cycle_interval`: Seconds per page (default: 10)
 
-### PDF.js Integration
+### PDF Rendering
 
-- Located in `static/pdfjs/`
-- Uses local copy for offline operation
-- Files: `pdf.min.js`, `pdf.worker.min.js`
-- Renders PDFs to HTML5 canvas
-- Scales PDFs to fit screen dimensions
+- PDFs are pre-rendered server-side with `pdftoppm` (poppler-utils) on upload
+- Output images stored in `renders/<display_id>/`
+- Display shows `<img>` tags — no client-side PDF processing
 
 ## Important Patterns
 

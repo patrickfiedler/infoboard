@@ -20,7 +20,6 @@ __pycache__/
 *.so
 .Python
 build/
-!static/pdfjs/build/
 develop-eggs/
 dist/
 downloads/
