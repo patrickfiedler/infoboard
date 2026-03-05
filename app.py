@@ -25,7 +25,7 @@ from models import (
     update_media_scale_to_fit,
     update_media_url,
     get_playlist_items, add_playlist_item, remove_playlist_item,
-    update_playlist_item_duration, move_playlist_item,
+    update_playlist_item_duration, move_playlist_item, reorder_playlist_items,
 )
 
 app = Flask(__name__)
@@ -622,15 +622,29 @@ def select_newest_for_display(display_id):
 @app.route('/admin/display/<int:display_id>/playlist/add', methods=['POST'])
 @login_required
 def playlist_add(display_id):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     if not get_display(display_id):
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Display nicht gefunden'}), 404
         flash('Display nicht gefunden', 'error')
         return redirect(url_for('admin'))
     media_id = request.form.get('media_id', type=int)
     duration = max(1, request.form.get('duration', 10, type=int))
-    if not media_id or not get_media(media_id):
+    media = get_media(media_id) if media_id else None
+    if not media:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Inhalt nicht gefunden'}), 404
         flash('Inhalt nicht gefunden', 'error')
         return redirect(url_for('admin'))
-    add_playlist_item(display_id, media_id, duration)
+    new_id = add_playlist_item(display_id, media_id, duration)
+    if is_ajax:
+        return jsonify({
+            'ok': True,
+            'id': new_id,
+            'original_name': media['original_name'],
+            'content_type': media['content_type'],
+            'duration': duration,
+        })
     flash('Inhalt zur Playlist hinzugefügt', 'success')
     return redirect(url_for('admin'))
 
@@ -639,6 +653,8 @@ def playlist_add(display_id):
 @login_required
 def playlist_remove(display_id, item_id):
     remove_playlist_item(item_id, display_id)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True})
     return redirect(url_for('admin'))
 
 
@@ -646,11 +662,24 @@ def playlist_remove(display_id, item_id):
 @login_required
 def playlist_update_dur(display_id, item_id):
     duration = request.form.get('duration', type=int)
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     if not duration or duration < 1:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Ungültige Dauer'}), 400
         flash('Ungültige Dauer', 'error')
         return redirect(url_for('admin'))
     update_playlist_item_duration(item_id, display_id, duration)
+    if is_ajax:
+        return jsonify({'ok': True})
     return redirect(url_for('admin'))
+
+
+@app.route('/admin/display/<int:display_id>/playlist/reorder', methods=['POST'])
+@login_required
+def playlist_reorder(display_id):
+    ordered_ids = request.json.get('order', [])
+    reorder_playlist_items(display_id, ordered_ids)
+    return jsonify({'ok': True})
 
 
 @app.route('/admin/display/<int:display_id>/playlist/item/<int:item_id>/move/<direction>', methods=['POST'])

@@ -118,7 +118,7 @@
         .pagination .current { background: #667eea; color: white; border-color: #667eea; }
 
         /* Display cards */
-        .display-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .display-cards { display: grid; grid-template-columns: 1fr; gap: 20px; margin-bottom: 20px; }
         .display-card {
             border: 1px solid #ddd; border-radius: 8px; overflow: hidden;
         }
@@ -134,8 +134,22 @@
         .display-card-body .now-playing { font-size: 13px; color: #555; margin-bottom: 10px; line-height: 1.6; }
         .display-card-body .now-playing strong { color: #333; font-size: 15px; display: block; }
         .display-card-body .now-playing .meta { color: #999; font-size: 12px; }
-        .display-settings-panel { padding: 14px 16px; border-top: 1px solid #eee; background: #fafafa; display: none; }
-        .display-settings-panel .form-row { margin-bottom: 10px; }
+
+        /* 2-column layout: settings | playlist */
+        .display-card-columns {
+            display: flex; gap: 0; border-top: 1px solid #eee;
+        }
+        .card-col-settings {
+            flex: 1; padding: 14px 16px; background: #fafafa; border-right: 1px solid #eee;
+        }
+        .card-col-settings h3 { font-size: 13px; font-weight: 600; color: #888; text-transform: uppercase;
+                                letter-spacing: 0.05em; margin-bottom: 12px; }
+        .card-col-settings .form-row { margin-bottom: 10px; }
+        .card-col-playlist {
+            flex: 1; padding: 14px 16px; background: #fff;
+        }
+        .card-col-playlist h3 { font-size: 13px; font-weight: 600; color: #888; text-transform: uppercase;
+                                letter-spacing: 0.05em; margin-bottom: 12px; }
 
         /* YouTube options row */
         .yt-opts-row { background: #f8f9fa; }
@@ -145,13 +159,13 @@
         .yt-opts-form input[type="checkbox"] { width: auto; margin: 0; }
         .yt-opts-form input[type="text"]  { width: 70px; padding: 5px 7px; font-size: 13px; }
 
-        /* Playlist panel */
-        .display-playlist-panel { padding: 14px 16px; border-top: 1px solid #eee; background: #fafafa; display: none; }
+        /* Playlist table */
         .playlist-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
         .playlist-table td { padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: middle; }
         .playlist-table tr:last-child td { border-bottom: none; }
-        .dur-form { display: flex; gap: 4px; align-items: center; }
-        .dur-form input { width: 60px; padding: 4px 6px; font-size: 13px; border: 1px solid #ddd; border-radius: 4px; }
+        .drag-handle { cursor: grab; color: #bbb; width: 20px; user-select: none; }
+        .drag-handle:active { cursor: grabbing; }
+        .dur-input { width: 60px; padding: 4px 6px; font-size: 13px; border: 1px solid #ddd; border-radius: 4px; transition: border-color 0.4s; }
 
         /* Active media row */
         tr.is-active td { background: #f0fdf4 !important; }
@@ -197,10 +211,13 @@
                         </div>
                     </div>
                     <div class="actions">
-                        <button class="btn-sm btn-info" type="button"
-                                onclick="togglePanel('playlist-{{ d.id }}')">Playlist{% if display_playlists.get(d.id) %} ({{ display_playlists[d.id]|length }}){% endif %}</button>
-                        <button class="btn-sm btn-secondary" type="button"
-                                onclick="togglePanel('settings-{{ d.id }}')">Einstellungen</button>
+                        <form method="POST" action="{{ url_for('select_newest_for_display', display_id=d.id) }}">
+                            <button type="submit" class="btn-sm">Neueste anzeigen</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('regenerate_renders', display_id=d.id) }}"
+                              onsubmit="return confirm('Alle PDFs für dieses Display neu rendern?');">
+                            <button type="submit" class="btn-sm btn-secondary">PDFs neu rendern</button>
+                        </form>
                         {% if displays|length > 1 %}
                         <form method="POST" action="{{ url_for('delete_display_route', display_id=d.id) }}"
                               onsubmit="return confirm('Display &quot;{{ d.name }}&quot; wirklich löschen?');">
@@ -210,150 +227,108 @@
                     </div>
                 </div>
 
-                <div class="display-card-body">
-                    <div class="now-playing">
-                        {% set pl = display_playlists.get(d.id, []) %}
-                        {% if pl %}
-                            <strong>Playlist aktiv &mdash; {{ pl|length }} Einträge</strong>
-                            <span class="meta">
-                                {% for pi in pl[:3] %}<span class="badge badge-{{ pi.content_type }}" style="font-size:10px;">{{ pi.original_name }}</span> {% endfor %}{% if pl|length > 3 %}…{% endif %}
-                                &nbsp;·&nbsp;<a href="{{ url_for('display_by_slug', slug=d.slug) }}" target="_blank">Vorschau ↗</a>
-                            </span>
-                        {% else %}
-                            {% set current = display_current.get(d.id) %}
-                            {% if current %}
-                                <strong>
-                                    <span class="badge badge-{{ current.content_type }}" style="font-size:10px;vertical-align:middle;margin-right:5px;">{{ type_labels.get(current.content_type, current.content_type) }}</span>{{ current.original_name }}
-                                </strong>
-                                <span class="meta">
-                                    {% if d.selected_media_id == 0 %}Automatisch (neuester Inhalt){% else %}Manuell ausgewählt{% endif %}
-                                    &nbsp;·&nbsp;<a href="{{ url_for('display_by_slug', slug=d.slug) }}" target="_blank">Vorschau ↗</a>
-                                </span>
-                            {% else %}
-                                <strong style="color:#999;">Kein Inhalt vorhanden</strong>
-                            {% endif %}
-                        {% endif %}
-                    </div>
-                    <div class="actions">
-                        <form method="POST" action="{{ url_for('select_newest_for_display', display_id=d.id) }}">
-                            <button type="submit" class="btn-sm">Neueste anzeigen</button>
-                        </form>
-                        <form method="POST" action="{{ url_for('regenerate_renders', display_id=d.id) }}"
-                              onsubmit="return confirm('Alle PDFs für dieses Display neu rendern?');">
-                            <button type="submit" class="btn-sm btn-secondary">PDFs neu rendern</button>
-                        </form>
-                    </div>
-                </div>
-
-                <div class="display-settings-panel" id="settings-{{ d.id }}">
-                    <form method="POST" action="{{ url_for('update_display_settings', display_id=d.id) }}">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Name</label>
-                                <input type="text" name="name" value="{{ d.name }}" required>
-                            </div>
-                            <div class="form-group form-group-sm">
-                                <label>Breite (px)</label>
-                                <input type="number" name="width" value="{{ d.width }}" min="1" required>
-                            </div>
-                            <div class="form-group form-group-sm">
-                                <label>Höhe (px)</label>
-                                <input type="number" name="height" value="{{ d.height }}" min="1" required>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Seitenwechsel (Sek.)</label>
-                                <input type="number" name="cycle_interval" value="{{ d.cycle_interval }}" min="1" max="300" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Hintergrundfarbe</label>
-                                <input type="color" name="background_color" value="{{ d.background_color }}" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Fortschrittsanzeige (PDF)</label>
-                                <select name="progress_indicator" required>
-                                    <option value="progress"  {% if d.progress_indicator == 'progress'  %}selected{% endif %}>Fortschrittsbalken</option>
-                                    <option value="subtle"    {% if d.progress_indicator == 'subtle'    %}selected{% endif %}>Dezenter Balken</option>
-                                    <option value="countdown" {% if d.progress_indicator == 'countdown' %}selected{% endif %}>Countdown</option>
-                                    <option value="none"      {% if d.progress_indicator == 'none'      %}selected{% endif %}>Keine</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Videoskalierung</label>
-                                <select name="video_fit" required>
-                                    <option value="contain" {% if d.video_fit == 'contain' %}selected{% endif %}>Letterbox (ganzes Bild)</option>
-                                    <option value="cover"   {% if d.video_fit == 'cover'   %}selected{% endif %}>Vollbild (beschnitten)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn-success">Speichern</button>
-                        <small style="color:#999;margin-left:10px;">Auflösungsänderung rendert alle PDFs neu.</small>
-                    </form>
-                </div>
-                <div class="display-playlist-panel" id="playlist-{{ d.id }}">
-                    {% set pl = display_playlists.get(d.id, []) %}
-                    {% if pl %}
-                    <table class="playlist-table">
-                        <tbody>
-                        {% for pi in pl %}
-                        <tr>
-                            <td style="color:#999;width:24px;">{{ loop.index }}</td>
-                            <td>
-                                <span class="badge badge-{{ pi.content_type }}" style="font-size:10px;">{{ type_labels.get(pi.content_type, pi.content_type) }}</span>
-                                {{ pi.original_name }}
-                            </td>
-                            <td>
-                                <form method="POST" action="{{ url_for('playlist_update_dur', display_id=d.id, item_id=pi.id) }}" class="dur-form">
-                                    <input type="number" name="duration" value="{{ pi.duration }}" min="1">
-                                    <span style="font-size:12px;color:#999;">s</span>
-                                    <button type="submit" class="btn-sm">OK</button>
-                                </form>
-                            </td>
-                            <td>
-                                <div class="actions">
-                                    {% if not loop.first %}
-                                    <form method="POST" action="{{ url_for('playlist_move_item', display_id=d.id, item_id=pi.id, direction='up') }}">
-                                        <button type="submit" class="btn-sm btn-secondary">↑</button>
-                                    </form>
-                                    {% endif %}
-                                    {% if not loop.last %}
-                                    <form method="POST" action="{{ url_for('playlist_move_item', display_id=d.id, item_id=pi.id, direction='down') }}">
-                                        <button type="submit" class="btn-sm btn-secondary">↓</button>
-                                    </form>
-                                    {% endif %}
-                                    <form method="POST" action="{{ url_for('playlist_remove', display_id=d.id, item_id=pi.id) }}">
-                                        <button type="submit" class="btn-sm btn-danger">✕</button>
-                                    </form>
+                <div class="display-card-columns">
+                    <!-- Settings column -->
+                    <div class="card-col-settings">
+                        <h3>Einstellungen</h3>
+                        <form method="POST" action="{{ url_for('update_display_settings', display_id=d.id) }}">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Name</label>
+                                    <input type="text" name="name" value="{{ d.name }}" required>
                                 </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                    {% else %}
-                    <p style="color:#999;font-size:13px;margin-bottom:12px;">Noch keine Einträge. Inhalte unten hinzufügen.</p>
-                    {% endif %}
-                    <form method="POST" action="{{ url_for('playlist_add', display_id=d.id) }}">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Inhalt</label>
-                                <select name="media_id" required>
-                                    {% for item in all_media %}
-                                    <option value="{{ item.id }}">{{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})</option>
-                                    {% endfor %}
-                                </select>
+                                <div class="form-group form-group-sm">
+                                    <label>Breite (px)</label>
+                                    <input type="number" name="width" value="{{ d.width }}" min="1" required>
+                                </div>
+                                <div class="form-group form-group-sm">
+                                    <label>Höhe (px)</label>
+                                    <input type="number" name="height" value="{{ d.height }}" min="1" required>
+                                </div>
                             </div>
-                            <div class="form-group form-group-sm">
-                                <label>Dauer (s)</label>
-                                <input type="number" name="duration" value="10" min="1" required>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Seitenwechsel (Sek.)</label>
+                                    <input type="number" name="cycle_interval" value="{{ d.cycle_interval }}" min="1" max="300" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Hintergrundfarbe</label>
+                                    <input type="color" name="background_color" value="{{ d.background_color }}" required>
+                                </div>
                             </div>
-                            <div>
-                                <label>&nbsp;</label>
-                                <button type="submit">Hinzufügen</button>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Fortschrittsanzeige (PDF)</label>
+                                    <select name="progress_indicator" required>
+                                        <option value="progress"  {% if d.progress_indicator == 'progress'  %}selected{% endif %}>Fortschrittsbalken</option>
+                                        <option value="subtle"    {% if d.progress_indicator == 'subtle'    %}selected{% endif %}>Dezenter Balken</option>
+                                        <option value="countdown" {% if d.progress_indicator == 'countdown' %}selected{% endif %}>Countdown</option>
+                                        <option value="none"      {% if d.progress_indicator == 'none'      %}selected{% endif %}>Keine</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Videoskalierung</label>
+                                    <select name="video_fit" required>
+                                        <option value="contain" {% if d.video_fit == 'contain' %}selected{% endif %}>Letterbox (ganzes Bild)</option>
+                                        <option value="cover"   {% if d.video_fit == 'cover'   %}selected{% endif %}>Vollbild (beschnitten)</option>
+                                    </select>
+                                </div>
                             </div>
-                        </div>
-                    </form>
+                            <button type="submit" class="btn-success">Speichern</button>
+                            <small style="color:#999;margin-left:10px;">Auflösungsänderung rendert alle PDFs neu.</small>
+                        </form>
+                    </div>
+
+                    <!-- Playlist column -->
+                    <div class="card-col-playlist">
+                        <h3>Playlist</h3>
+                        {% set pl = display_playlists.get(d.id, []) %}
+                        {% if not pl %}
+                        <p style="color:#999;font-size:13px;margin-bottom:12px;" class="playlist-empty-{{ d.id }}">Noch keine Einträge.</p>
+                        {% endif %}
+                        <table class="playlist-table" {% if not pl %}style="display:none;"{% endif %}>
+                            <tbody class="playlist-sortable" data-display="{{ d.id }}">
+                            {% for pi in pl %}
+                            <tr data-id="{{ pi.id }}">
+                                <td class="drag-handle">☰</td>
+                                <td>
+                                    <span class="badge badge-{{ pi.content_type }}" style="font-size:10px;">{{ type_labels.get(pi.content_type, pi.content_type) }}</span>
+                                    {{ pi.original_name }}
+                                </td>
+                                <td>
+                                    <input type="number" class="dur-input" data-display="{{ d.id }}" data-item="{{ pi.id }}"
+                                           value="{{ pi.duration }}" min="1">
+                                    <span style="font-size:12px;color:#999;">s</span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger remove-item"
+                                            data-display="{{ d.id }}" data-item="{{ pi.id }}">✕</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                        <form class="playlist-add-form" data-display="{{ d.id }}" style="margin-top:8px;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Inhalt</label>
+                                    <select name="media_id" required>
+                                        {% for item in all_media %}
+                                        <option value="{{ item.id }}">{{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="form-group form-group-sm">
+                                    <label>Dauer (s)</label>
+                                    <input type="number" name="duration" value="10" min="1" required>
+                                </div>
+                                <div>
+                                    <label>&nbsp;</label>
+                                    <button type="submit">Hinzufügen</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
             {% endfor %}
@@ -600,13 +575,10 @@
 
 </div>
 
+<script src="{{ url_for('static', filename='js/sortable.min.js') }}"></script>
 <script>
     function toggleRename(id) {
         document.getElementById('rename-' + id).classList.toggle('active');
-    }
-    function togglePanel(id) {
-        var el = document.getElementById(id);
-        el.style.display = el.style.display === 'block' ? 'none' : 'block';
     }
     function toggleYtOpts(id) {
         var row = document.getElementById('yt-opts-' + id);
@@ -615,6 +587,100 @@
     function toggleCcLang(id) {
         var checked = document.getElementById('cc-' + id).checked;
         document.getElementById('cc-lang-label-' + id).style.display = checked ? '' : 'none';
+    }
+
+    // Duration auto-save on change
+    document.addEventListener('change', function(e) {
+        if (!e.target.classList.contains('dur-input')) return;
+        var displayId = e.target.dataset.display;
+        var itemId    = e.target.dataset.item;
+        var duration  = parseInt(e.target.value);
+        if (!duration || duration < 1) return;
+        fetch('/admin/display/' + displayId + '/playlist/item/' + itemId + '/duration', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+            body: 'duration=' + duration
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            e.target.style.borderColor = data.ok ? '#28a745' : '#dc3545';
+            setTimeout(function() { e.target.style.borderColor = ''; }, 1000);
+        });
+    });
+
+    // Remove item
+    document.addEventListener('click', function(e) {
+        if (!e.target.classList.contains('remove-item')) return;
+        var displayId = e.target.dataset.display;
+        var itemId    = e.target.dataset.item;
+        fetch('/admin/display/' + displayId + '/playlist/item/' + itemId + '/remove', {
+            method: 'POST',
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            if (!data.ok) return;
+            var tr = e.target.closest('tr');
+            var tbody = tr.closest('tbody');
+            tr.remove();
+            // Hide table and show empty message if no rows left
+            if (tbody.querySelectorAll('tr').length === 0) {
+                tbody.closest('table').style.display = 'none';
+                var empty = document.querySelector('.playlist-empty-' + displayId);
+                if (empty) empty.style.display = '';
+            }
+        });
+    });
+
+    // SortableJS init
+    document.querySelectorAll('.playlist-sortable').forEach(function(tbody) {
+        Sortable.create(tbody, {
+            handle: '.drag-handle',
+            animation: 150,
+            onEnd: function() {
+                var displayId = tbody.dataset.display;
+                var ids = Array.from(tbody.querySelectorAll('tr')).map(function(r) { return parseInt(r.dataset.id); });
+                fetch('/admin/display/' + displayId + '/playlist/reorder', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: JSON.stringify({order: ids})
+                });
+            }
+        });
+    });
+
+    // Add item via AJAX
+    document.querySelectorAll('.playlist-add-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var displayId = form.dataset.display;
+            var data = new FormData(form);
+            fetch('/admin/display/' + displayId + '/playlist/add', {
+                method: 'POST',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                body: new URLSearchParams(data)
+            }).then(function(r) { return r.json(); }).then(function(item) {
+                if (!item.ok) return;
+                var tbody = document.querySelector('.playlist-sortable[data-display="' + displayId + '"]');
+                tbody.appendChild(buildPlaylistRow(displayId, item));
+                tbody.closest('table').style.display = '';
+                var empty = document.querySelector('.playlist-empty-' + displayId);
+                if (empty) empty.style.display = 'none';
+                form.reset();
+                // Re-init Sortable on the tbody (already init'd, new row is auto-included)
+            });
+        });
+    });
+
+    function buildPlaylistRow(displayId, item) {
+        var tr = document.createElement('tr');
+        tr.dataset.id = item.id;
+        tr.innerHTML =
+            '<td class="drag-handle">☰</td>' +
+            '<td><span class="badge badge-' + item.content_type + '" style="font-size:10px;">' + item.content_type + '</span> ' + escHtml(item.original_name) + '</td>' +
+            '<td><input type="number" class="dur-input" data-display="' + displayId + '" data-item="' + item.id + '" value="' + item.duration + '" min="1"> <span style="font-size:12px;color:#999;">s</span></td>' +
+            '<td><button class="btn btn-sm btn-danger remove-item" data-display="' + displayId + '" data-item="' + item.id + '">✕</button></td>';
+        return tr;
+    }
+
+    function escHtml(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 </script>
 </body>

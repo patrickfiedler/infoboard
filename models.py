@@ -475,6 +475,7 @@ def add_playlist_item(display_id, media_id, duration):
             'INSERT INTO playlist_items (display_id, media_id, duration, position) VALUES (?, ?, ?, ?)',
             (display_id, media_id, duration, max_pos + 1)
         )
+        return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
 
 
 def remove_playlist_item(item_id, display_id):
@@ -498,6 +499,16 @@ def update_playlist_item_duration(item_id, display_id, duration):
             'UPDATE playlist_items SET duration = ? WHERE id = ? AND display_id = ?',
             (duration, item_id, display_id)
         )
+
+
+def reorder_playlist_items(display_id, ordered_ids):
+    """Set positions from an ordered list of item IDs."""
+    with get_db() as conn:
+        for i, item_id in enumerate(ordered_ids, 1):
+            conn.execute(
+                'UPDATE playlist_items SET position = ? WHERE id = ? AND display_id = ?',
+                (i, item_id, display_id)
+            )
 
 
 def move_playlist_item(item_id, display_id, direction):
