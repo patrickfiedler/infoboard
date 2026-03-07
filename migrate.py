@@ -15,7 +15,7 @@ import os
 import importlib.util
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'kundenstopper.db')
+DB_PATH = os.path.join(os.path.dirname(__file__), 'infoboard.db')
 MIGRATIONS_DIR = os.path.join(os.path.dirname(__file__), 'migrations')
 
 

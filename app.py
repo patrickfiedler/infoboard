@@ -337,7 +337,7 @@ def proxy():
 
     try:
         resp = http_requests.get(url, timeout=15, headers={
-            'User-Agent': 'Mozilla/5.0 (compatible; Kundenstopper/1.0)'
+            'User-Agent': 'Mozilla/5.0 (compatible; Infoboard/1.0)'
         })
     except http_requests.RequestException:
         abort(502)
@@ -1015,7 +1015,7 @@ def manual_cleanup():
 
 if __name__ == '__main__':
     from waitress import serve
-    print(f'Starting Kundenstopper on {config.host}:{config.port}')
+    print(f'Starting Infoboard on {config.host}:{config.port}')
     print(f'Admin: http://{config.host}:{config.port}/admin')
     for d in get_all_displays():
         print(f'Display "{d["name"]}": http://{config.host}:{config.port}/display/{d["slug"]}')

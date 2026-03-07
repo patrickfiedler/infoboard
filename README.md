@@ -112,7 +112,7 @@ infoboard/
 ├── cookie_hide.conf            # CSS selectors to hide on proxied pages
 ├── config.json.example         # Config template
 ├── generate_password_hash.py   # Generate bcrypt password hash
-└── kundenstopper.service       # Systemd service template
+└── infoboard.service       # Systemd service template
 ```
 
 ## Security Notes

@@ -1,4 +1,4 @@
-# Implementation Plan: Kundenstopper Expansion
+# Implementation Plan: Infoboard Expansion
 
 ## Goal
 Expand the app from a single-display PDF viewer into a multi-display digital signage platform supporting images, video, websites, and YouTube — managed from one admin backend.

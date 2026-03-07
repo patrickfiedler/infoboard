@@ -1,14 +1,14 @@
 [Unit]
-Description=Kundenstopper PDF Display Service
+Description=Infoboard PDF Display Service
 After=network.target
 
 [Service]
 Type=simple
 User=user
 Group=user
-WorkingDirectory=/path/to/working/directory/of/kundenstopper
+WorkingDirectory=/path/to/working/directory/of/infoboard
 Environment="PATH=/usr/bin:/usr/local/bin"
-ExecStart=/usr/bin/python3 /path/to/kundenstopper/app.py
+ExecStart=/usr/bin/python3 /path/to/infoboard/app.py
 
 # Restart configuration
 Restart=always
@@ -21,7 +21,7 @@ PrivateTmp=true
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=kundenstopper
+SyslogIdentifier=infoboard
 
 [Install]
 WantedBy=multi-user.target

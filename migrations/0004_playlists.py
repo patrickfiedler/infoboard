@@ -2,7 +2,7 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'kundenstopper.db')
+DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'infoboard.db')
 
 
 def run():

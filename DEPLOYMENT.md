@@ -1,6 +1,6 @@
-# Kundenstopper Deployment Guide
+# Infoboard Deployment Guide
 
-This guide covers deploying and updating Kundenstopper on Linux machines using Git.
+This guide covers deploying and updating Infoboard on Linux machines using Git.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ This guide covers deploying and updating Kundenstopper on Linux machines using G
 
 ## Prerequisites
 
-Before deploying Kundenstopper, ensure the target machine has:
+Before deploying Infoboard, ensure the target machine has:
 
 - **Linux Operating System** (tested on Ubuntu, Debian, CachyOS)
 - **Python 3.7+** and pip
@@ -54,8 +54,8 @@ The `deploy.sh` script automates the entire setup process.
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/patrickfiedler/kundenstopper.git
-   cd kundenstopper
+   git clone https://github.com/patrickfiedler/infoboard.git
+   cd infoboard
    ```
 
 2. **Run the deployment script:**
@@ -83,7 +83,7 @@ The `deploy.sh` script automates the entire setup process.
 **Example output:**
 ```
 ========================================
-Kundenstopper Deployment Script
+Infoboard Deployment Script
 ========================================
 
 [1/7] Checking Python 3...
@@ -132,7 +132,7 @@ The `update.sh` script safely updates your installation from GitHub.
 
 1. **Navigate to your installation:**
    ```bash
-   cd /path/to/kundenstopper
+   cd /path/to/infoboard
    ```
 
 2. **Run the update script:**
@@ -161,7 +161,7 @@ The `update.sh` script safely updates your installation from GitHub.
 **Example output:**
 ```
 ========================================
-Kundenstopper Update Script
+Infoboard Update Script
 ========================================
 
 [1/6] Creating backup tag...
@@ -203,7 +203,7 @@ If you prefer manual control:
 
 1. **Stop the service:**
    ```bash
-   sudo systemctl stop kundenstopper
+   sudo systemctl stop infoboard
    ```
 
 2. **Create backup:**
@@ -230,8 +230,8 @@ If you prefer manual control:
 
 6. **Restart service:**
    ```bash
-   sudo systemctl start kundenstopper
-   sudo systemctl status kundenstopper
+   sudo systemctl start infoboard
+   sudo systemctl status infoboard
    ```
 
 ---
@@ -243,8 +243,8 @@ If you prefer to deploy manually without the `deploy.sh` script:
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/patrickfiedler/kundenstopper.git
-cd kundenstopper
+git clone https://github.com/patrickfiedler/infoboard.git
+cd infoboard
 ```
 
 ### 2. Create Virtual Environment (Recommended)
@@ -296,18 +296,18 @@ Visit `http://localhost:8080` to verify it works.
 
 ```bash
 # Edit service file with your paths
-nano kundenstopper.service
+nano infoboard.service
 
 # Copy to systemd
-sudo cp kundenstopper.service /etc/systemd/system/
+sudo cp infoboard.service /etc/systemd/system/
 
 # Enable and start
 sudo systemctl daemon-reload
-sudo systemctl enable kundenstopper
-sudo systemctl start kundenstopper
+sudo systemctl enable infoboard
+sudo systemctl start infoboard
 
 # Check status
-sudo systemctl status kundenstopper
+sudo systemctl status infoboard
 ```
 
 ---
@@ -328,13 +328,13 @@ git tag | grep backup
 **Rollback to a specific backup:**
 ```bash
 # Stop service
-sudo systemctl stop kundenstopper
+sudo systemctl stop infoboard
 
 # Reset to backup
 git reset --hard backup-20260108-143022
 
 # Restart service
-sudo systemctl start kundenstopper
+sudo systemctl start infoboard
 ```
 
 ### Manual Rollback
@@ -346,9 +346,9 @@ If you didn't use `update.sh`:
 git log --oneline -10
 
 # Reset to specific commit
-sudo systemctl stop kundenstopper
+sudo systemctl stop infoboard
 git reset --hard <commit-hash>
-sudo systemctl start kundenstopper
+sudo systemctl start infoboard
 ```
 
 ---
@@ -359,54 +359,54 @@ sudo systemctl start kundenstopper
 
 **Check service status:**
 ```bash
-sudo systemctl status kundenstopper
+sudo systemctl status infoboard
 ```
 
 **Start service:**
 ```bash
-sudo systemctl start kundenstopper
+sudo systemctl start infoboard
 ```
 
 **Stop service:**
 ```bash
-sudo systemctl stop kundenstopper
+sudo systemctl stop infoboard
 ```
 
 **Restart service:**
 ```bash
-sudo systemctl restart kundenstopper
+sudo systemctl restart infoboard
 ```
 
 **Enable auto-start on boot:**
 ```bash
-sudo systemctl enable kundenstopper
+sudo systemctl enable infoboard
 ```
 
 **Disable auto-start:**
 ```bash
-sudo systemctl disable kundenstopper
+sudo systemctl disable infoboard
 ```
 
 ### Viewing Logs
 
 **Real-time logs:**
 ```bash
-sudo journalctl -u kundenstopper -f
+sudo journalctl -u infoboard -f
 ```
 
 **Last 50 lines:**
 ```bash
-sudo journalctl -u kundenstopper -n 50
+sudo journalctl -u infoboard -n 50
 ```
 
 **All logs:**
 ```bash
-sudo journalctl -u kundenstopper
+sudo journalctl -u infoboard
 ```
 
 **Logs since boot:**
 ```bash
-sudo journalctl -u kundenstopper -b
+sudo journalctl -u infoboard -b
 ```
 
 ---
@@ -427,9 +427,9 @@ Solution: Run deploy.sh first for initial setup
 
 **Issue: Service fails to start after update**
 ```
-1. Check logs: sudo journalctl -u kundenstopper -n 50
+1. Check logs: sudo journalctl -u infoboard -n 50
 2. Rollback: git reset --hard <backup-tag>
-3. Restart: sudo systemctl restart kundenstopper
+3. Restart: sudo systemctl restart infoboard
 ```
 
 ### Deployment Issues
@@ -459,13 +459,13 @@ nano config.json
 # Change "port": 8080 to another port
 
 # Restart service
-sudo systemctl restart kundenstopper
+sudo systemctl restart infoboard
 ```
 
 **Issue: Can't connect to the app**
 ```bash
 # Check if service is running
-sudo systemctl status kundenstopper
+sudo systemctl status infoboard
 
 # Check firewall (if accessing from another machine)
 sudo ufw allow 8080/tcp
@@ -485,7 +485,7 @@ python3 generate_password_hash.py
 nano config.json
 
 # Restart service
-sudo systemctl restart kundenstopper
+sudo systemctl restart infoboard
 ```
 
 **Issue: New config options after update**
@@ -504,7 +504,7 @@ nano config.json
 The following files are **never overwritten** by updates (protected by `.gitignore`):
 
 - `config.json` - Your configuration
-- `kundenstopper.db` - Your database
+- `infoboard.db` - Your database
 - `uploads/` - Your uploaded PDFs
 - `venv/` - Your virtual environment
 
@@ -529,8 +529,8 @@ To deploy on multiple machines:
 
 1. **Clone on each machine:**
    ```bash
-   git clone https://github.com/patrickfiedler/kundenstopper.git
-   cd kundenstopper
+   git clone https://github.com/patrickfiedler/infoboard.git
+   cd infoboard
    ./deploy.sh
    ```
 
@@ -542,7 +542,7 @@ To deploy on multiple machines:
 3. **Update all machines:**
    ```bash
    # On each machine:
-   cd /path/to/kundenstopper
+   cd /path/to/infoboard
    ./update.sh
    ```
 
@@ -550,6 +550,6 @@ To deploy on multiple machines:
 
 ## Getting Help
 
-- **GitHub Issues:** https://github.com/patrickfiedler/kundenstopper/issues
+- **GitHub Issues:** https://github.com/patrickfiedler/infoboard/issues
 - **Documentation:** See README.md for usage instructions
-- **Logs:** Always check `sudo journalctl -u kundenstopper -n 50` when troubleshooting
+- **Logs:** Always check `sudo journalctl -u infoboard -n 50` when troubleshooting

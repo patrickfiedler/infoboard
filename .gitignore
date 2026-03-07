@@ -8,7 +8,7 @@ deployment.conf
 renders/
 
 # Database
-kundenstopper.db
+infoboard.db
 
 # Uploaded PDF files
 uploads/

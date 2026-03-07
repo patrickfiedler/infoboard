@@ -12,7 +12,7 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}Kundenstopper Deployment Script${NC}"
+echo -e "${BLUE}Infoboard Deployment Script${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
@@ -192,8 +192,8 @@ read -p "Setup systemd service? [y/N]: " setup_service
 setup_service=${setup_service:-N}
 
 if [[ $setup_service =~ ^[Yy]$ ]]; then
-    SERVICE_FILE="$SCRIPT_DIR/kundenstopper.service"
-    TEMP_SERVICE="/tmp/kundenstopper.service"
+    SERVICE_FILE="$SCRIPT_DIR/infoboard.service"
+    TEMP_SERVICE="/tmp/infoboard.service"
 
     # Detect current user and group
     CURRENT_USER=$(whoami)
@@ -211,7 +211,7 @@ if [[ $setup_service =~ ^[Yy]$ ]]; then
     # Generate service file
     cat > "$TEMP_SERVICE" << SERVICEEOF
 [Unit]
-Description=Kundenstopper PDF Display Service
+Description=Infoboard PDF Display Service
 After=network.target
 
 [Service]
@@ -233,7 +233,7 @@ PrivateTmp=true
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=kundenstopper
+SyslogIdentifier=infoboard
 
 [Install]
 WantedBy=multi-user.target
@@ -248,14 +248,14 @@ SERVICEEOF
     install_service=${install_service:-Y}
 
     if [[ $install_service =~ ^[Yy]$ ]]; then
-        sudo cp "$TEMP_SERVICE" /etc/systemd/system/kundenstopper.service
+        sudo cp "$TEMP_SERVICE" /etc/systemd/system/infoboard.service
         sudo systemctl daemon-reload
 
         read -p "Enable service to start on boot? [Y/n]: " enable_service
         enable_service=${enable_service:-Y}
 
         if [[ $enable_service =~ ^[Yy]$ ]]; then
-            sudo systemctl enable kundenstopper
+            sudo systemctl enable infoboard
             echo -e "${GREEN}✓ Service enabled${NC}"
         fi
 
@@ -263,12 +263,12 @@ SERVICEEOF
         start_service=${start_service:-Y}
 
         if [[ $start_service =~ ^[Yy]$ ]]; then
-            sudo systemctl start kundenstopper
+            sudo systemctl start infoboard
             echo -e "${GREEN}✓ Service started${NC}"
             echo ""
             echo "Checking service status..."
             sleep 2
-            sudo systemctl status kundenstopper --no-pager -l
+            sudo systemctl status infoboard --no-pager -l
         fi
     fi
 
@@ -295,10 +295,10 @@ echo ""
 
 if [[ $setup_service =~ ^[Yy]$ ]] && [[ $start_service =~ ^[Yy]$ ]]; then
     echo -e "${BLUE}Service Management:${NC}"
-    echo "  Status:  sudo systemctl status kundenstopper"
-    echo "  Stop:    sudo systemctl stop kundenstopper"
-    echo "  Restart: sudo systemctl restart kundenstopper"
-    echo "  Logs:    sudo journalctl -u kundenstopper -f"
+    echo "  Status:  sudo systemctl status infoboard"
+    echo "  Stop:    sudo systemctl stop infoboard"
+    echo "  Restart: sudo systemctl restart infoboard"
+    echo "  Logs:    sudo journalctl -u infoboard -f"
 else
     echo -e "${BLUE}To start manually:${NC}"
     if [ "$USING_VENV" = true ]; then

@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-DATABASE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'kundenstopper.db')
+DATABASE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'infoboard.db')
 
 
 def run():

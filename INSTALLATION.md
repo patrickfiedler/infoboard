@@ -1,4 +1,4 @@
-# Kundenstopper Installation als systemd Service
+# Infoboard Installation als systemd Service
 
 ## Voraussetzungen
 
@@ -10,7 +10,7 @@
 
 ### 1. Systemd Service-Datei anpassen
 
-Öffnen Sie `kundenstopper.service` und passen Sie folgende Werte an:
+Öffnen Sie `infoboard.service` und passen Sie folgende Werte an:
 
 - **User**: Ersetzen Sie `patrick` mit Ihrem Benutzernamen
 - **Group**: Ersetzen Sie `patrick` mit Ihrer Gruppe
@@ -20,7 +20,7 @@
 ### 2. Service-Datei nach /etc/systemd/system kopieren
 
 ```bash
-sudo cp kundenstopper.service /etc/systemd/system/
+sudo cp infoboard.service /etc/systemd/system/
 ```
 
 ### 3. Systemd neu laden
@@ -32,13 +32,13 @@ sudo systemctl daemon-reload
 ### 4. Service aktivieren (automatischer Start beim Booten)
 
 ```bash
-sudo systemctl enable kundenstopper
+sudo systemctl enable infoboard
 ```
 
 ### 5. Service starten
 
 ```bash
-sudo systemctl start kundenstopper
+sudo systemctl start infoboard
 ```
 
 ## Verwaltung des Service
@@ -46,38 +46,38 @@ sudo systemctl start kundenstopper
 ### Status überprüfen
 
 ```bash
-sudo systemctl status kundenstopper
+sudo systemctl status infoboard
 ```
 
 ### Logs anzeigen
 
 ```bash
 # Alle Logs
-sudo journalctl -u kundenstopper
+sudo journalctl -u infoboard
 
 # Logs in Echtzeit verfolgen
-sudo journalctl -u kundenstopper -f
+sudo journalctl -u infoboard -f
 
 # Nur die letzten 50 Zeilen
-sudo journalctl -u kundenstopper -n 50
+sudo journalctl -u infoboard -n 50
 ```
 
 ### Service neu starten
 
 ```bash
-sudo systemctl restart kundenstopper
+sudo systemctl restart infoboard
 ```
 
 ### Service stoppen
 
 ```bash
-sudo systemctl stop kundenstopper
+sudo systemctl stop infoboard
 ```
 
 ### Service deaktivieren (kein automatischer Start)
 
 ```bash
-sudo systemctl disable kundenstopper
+sudo systemctl disable infoboard
 ```
 
 ## Automatischer Neustart
@@ -93,7 +93,7 @@ Der Service ist so konfiguriert, dass er:
 
 1. Überprüfen Sie die Logs:
    ```bash
-   sudo journalctl -u kundenstopper -n 50
+   sudo journalctl -u infoboard -n 50
    ```
 
 2. Stellen Sie sicher, dass:
@@ -105,7 +105,7 @@ Der Service ist so konfiguriert, dass er:
 
 3. Testen Sie die Anwendung manuell:
    ```bash
-   cd /mnt/Speicherplatz/Nextcloud/Dokumente/coding/kundenstopper
+   cd /mnt/Speicherplatz/Nextcloud/Dokumente/coding/infoboard
    python3 app.py
    ```
 
@@ -113,7 +113,7 @@ Der Service ist so konfiguriert, dass er:
 
 Stellen Sie sicher, dass der Benutzer Schreibrechte hat:
 ```bash
-sudo chown -R patrick:patrick /mnt/Speicherplatz/Nextcloud/Dokumente/coding/kundenstopper
+sudo chown -R patrick:patrick /mnt/Speicherplatz/Nextcloud/Dokumente/coding/infoboard
 ```
 
 ### Port bereits belegt
@@ -127,7 +127,7 @@ Wenn Port 8080 bereits verwendet wird, ändern Sie den Port in `config.json`:
 
 Dann Service neu starten:
 ```bash
-sudo systemctl restart kundenstopper
+sudo systemctl restart infoboard
 ```
 
 ## Zugriff auf die Anwendung

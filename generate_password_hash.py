@@ -8,7 +8,7 @@ import getpass
 
 def generate_hash():
     """Generate a bcrypt hash for a password."""
-    print("Kundenstopper Password Hash Generator")
+    print("Infoboard Password Hash Generator")
     print("=" * 40)
 
     password = getpass.getpass("Enter password: ")

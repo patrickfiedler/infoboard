@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Kundenstopper is a Flask-based web application for displaying PDF files with automatic page cycling. It's designed for digital signage, displaying menus, announcements, or promotional materials in fullscreen mode.
+Infoboard is a Flask-based web application for displaying PDF files with automatic page cycling. It's designed for digital signage, displaying menus, announcements, or promotional materials in fullscreen mode.
 
 ## Technology Stack
 
@@ -44,10 +44,10 @@ python3 app.py
 
 ### Database Operations
 
-The database (`kundenstopper.db`) is automatically created on first run. To reset:
+The database (`infoboard.db`) is automatically created on first run. To reset:
 
 ```bash
-rm kundenstopper.db
+rm infoboard.db
 python3 app.py  # Will reinitialize database
 ```
 

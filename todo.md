@@ -1,4 +1,4 @@
-# Kundenstopper — Todo
+# Infoboard — Todo
 
 ## Features / Improvements
 - [ ] Phase 2: Smart TV testing (needs hardware — Samsung Tizen / LG WebOS / Android TV)

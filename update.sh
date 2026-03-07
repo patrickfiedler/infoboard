@@ -11,7 +11,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}Kundenstopper Update Script${NC}"
+echo -e "${BLUE}Infoboard Update Script${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
@@ -67,7 +67,7 @@ echo -e "${BLUE}Target: $TARGET_TYPE ($TARGET_VALUE)${NC}"
 
 # Detect venv and service
 USING_SYSTEMD=false
-systemctl is-active --quiet kundenstopper 2>/dev/null && USING_SYSTEMD=true
+systemctl is-active --quiet infoboard 2>/dev/null && USING_SYSTEMD=true
 
 if [ -d "$SCRIPT_DIR/venv" ]; then
     PYTHON="$SCRIPT_DIR/venv/bin/python3"
@@ -143,13 +143,13 @@ echo -e "${YELLOW}[2/5] Creating backup tag...${NC}"
 BACKUP_TAG="backup-$(date +%Y%m%d-%H%M%S)"
 git -C "$SCRIPT_DIR" tag "$BACKUP_TAG"
 echo -e "${GREEN}✓ Backup tag: $BACKUP_TAG${NC}"
-echo "  Rollback: git reset --hard $BACKUP_TAG && sudo systemctl restart kundenstopper"
+echo "  Rollback: git reset --hard $BACKUP_TAG && sudo systemctl restart infoboard"
 echo ""
 
 # ---------- [3/5] Stop service, pull code ----------
 echo -e "${YELLOW}[3/5] Updating code...${NC}"
 if [ "$USING_SYSTEMD" = true ]; then
-    sudo systemctl stop kundenstopper
+    sudo systemctl stop infoboard
     echo "Service stopped."
 fi
 
@@ -193,17 +193,17 @@ echo ""
 # ---------- [5/5] Restart service ----------
 echo -e "${YELLOW}[5/5] Starting service...${NC}"
 if [ "$USING_SYSTEMD" = true ]; then
-    sudo systemctl start kundenstopper
+    sudo systemctl start infoboard
     sleep 2
-    if systemctl is-active --quiet kundenstopper; then
+    if systemctl is-active --quiet infoboard; then
         echo -e "${GREEN}✓ Service started${NC}"
     else
         echo -e "${RED}Service failed to start!${NC}"
-        echo "Logs: sudo journalctl -u kundenstopper -n 50"
+        echo "Logs: sudo journalctl -u infoboard -n 50"
         echo ""
         echo -e "${YELLOW}To rollback:${NC}"
         echo "  git -C $SCRIPT_DIR reset --hard $BACKUP_TAG"
-        echo "  sudo systemctl restart kundenstopper"
+        echo "  sudo systemctl restart infoboard"
         exit 1
     fi
 else

@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from contextlib import contextmanager
 
-DATABASE_PATH = 'kundenstopper.db'
+DATABASE_PATH = 'infoboard.db'
 
 
 @contextmanager
