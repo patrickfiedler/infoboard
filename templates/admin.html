@@ -548,6 +548,10 @@
                                        download="{{ item.original_name }}"
                                        class="btn btn-sm btn-info">↓</a>
                                 {% endif %}
+                                {% if item.content_type == 'url' %}
+                                    <button type="button" class="btn-sm btn-secondary"
+                                            onclick="toggleUrlOpts({{ item.id }})">Optionen</button>
+                                {% endif %}
                                 {% if item.content_type == 'youtube' %}
                                     <button type="button" class="btn-sm btn-secondary"
                                             onclick="toggleYtOpts({{ item.id }})">Optionen</button>
@@ -600,6 +604,20 @@
                                         <button type="submit">Hochladen</button>
                                     </div>
                                 </div>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% if item.content_type == 'url' %}
+                    <tr class="yt-opts-row" id="url-opts-{{ item.id }}" style="display:none;">
+                        <td colspan="6">
+                            <form method="POST" action="{{ url_for('url_options', media_id=item.id) }}" class="yt-opts-form">
+                                <label style="flex:1;">
+                                    URL:
+                                    <input type="url" name="url" value="{{ item.url }}" required
+                                           style="width:100%;min-width:300px;padding:5px 7px;font-size:13px;">
+                                </label>
+                                <button type="submit" class="btn-sm btn-success">Speichern</button>
                             </form>
                         </td>
                     </tr>
@@ -704,6 +722,10 @@
 <script>
     function toggleRename(id) {
         document.getElementById('rename-' + id).classList.toggle('active');
+    }
+    function toggleUrlOpts(id) {
+        var row = document.getElementById('url-opts-' + id);
+        row.style.display = row.style.display === 'none' ? '' : 'none';
     }
     function toggleYtOpts(id) {
         var row = document.getElementById('yt-opts-' + id);

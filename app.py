@@ -907,6 +907,24 @@ def add_url():
 
 
 
+@app.route('/admin/media/<int:media_id>/url-options', methods=['POST'])
+@login_required
+def url_options(media_id):
+    media = get_media(media_id)
+    if not media or media['content_type'] != 'url':
+        flash('Inhalt nicht gefunden oder kein Website-Typ', 'error')
+        return redirect(url_for('admin'))
+
+    new_url = request.form.get('url', '').strip()
+    if not new_url.startswith(('http://', 'https://')):
+        flash('Ungültige URL', 'error')
+        return redirect(url_for('admin'))
+
+    update_media_url(media_id, new_url)
+    flash('URL gespeichert', 'success')
+    return redirect(url_for('admin'))
+
+
 @app.route('/admin/media/<int:media_id>/youtube-options', methods=['POST'])
 @login_required
 def youtube_options(media_id):
