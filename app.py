@@ -22,7 +22,6 @@ from models import (
     delete_pdf_renders_for_display,
     cleanup_old_media,
     get_url_media_by_url,
-    update_media_scale_to_fit,
     update_media_url,
     get_playlist_items, add_playlist_item, remove_playlist_item,
     update_playlist_item_duration, move_playlist_item, reorder_playlist_items,
@@ -545,7 +544,6 @@ def update_display_settings(display_id):
     height = request.form.get('height', type=int)
     background_color = request.form.get('background_color', '').strip()
     progress_indicator = request.form.get('progress_indicator', '').strip()
-    video_fit = request.form.get('video_fit', '').strip()
 
     errors = []
     if not name:
@@ -558,8 +556,6 @@ def update_display_settings(display_id):
         errors.append('Ungültige Hintergrundfarbe')
     if progress_indicator not in ('progress', 'subtle', 'countdown', 'none'):
         errors.append('Ungültige Fortschrittsanzeige')
-    if video_fit not in ('contain', 'cover'):
-        errors.append('Ungültige Videoskalierung')
 
     if errors:
         for e in errors:
@@ -570,7 +566,7 @@ def update_display_settings(display_id):
 
     update_display(display_id, name=name, width=width, height=height,
                    background_color=background_color,
-                   progress_indicator=progress_indicator, video_fit=video_fit)
+                   progress_indicator=progress_indicator)
 
     if resolution_changed:
         display = get_display(display_id)
@@ -641,6 +637,28 @@ def select_newest_for_display(display_id):
 
     update_display(display_id, selected_media_id=0)
     flash(f'"{display["name"]}" zeigt jetzt den neuesten Inhalt', 'success')
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/display/<int:display_id>/select-direct', methods=['POST'])
+@login_required
+def select_direct_for_display(display_id):
+    display = get_display(display_id)
+    if not display:
+        flash('Display nicht gefunden', 'error')
+        return redirect(url_for('admin'))
+
+    media_id = request.form.get('media_id', type=int)
+    if media_id == 0:
+        update_display(display_id, selected_media_id=0)
+        flash(f'"{display["name"]}" zeigt jetzt den neuesten Inhalt', 'success')
+    else:
+        media = get_media(media_id)
+        if not media:
+            flash('Inhalt nicht gefunden', 'error')
+            return redirect(url_for('admin'))
+        update_display(display_id, selected_media_id=media_id)
+        flash(f'"{media["original_name"]}" wird auf "{display["name"]}" angezeigt', 'success')
     return redirect(url_for('admin'))
 
 
@@ -881,22 +899,12 @@ def add_url():
 
     content_type = detect_url_content_type(raw_url)
     final_url = make_youtube_embed(raw_url) if content_type == 'youtube' else raw_url
-    scale_to_fit = content_type == 'url' and 'scale_to_fit' in request.form
 
-    add_media(content_type, name, url=final_url, scale_to_fit=scale_to_fit)
+    add_media(content_type, name, url=final_url)
     flash(f'"{name}" erfolgreich hinzugefügt', 'success')
     return redirect(url_for('admin'))
 
 
-@app.route('/admin/media/<int:media_id>/toggle-scale', methods=['POST'])
-@login_required
-def toggle_scale_to_fit(media_id):
-    media = get_media(media_id)
-    if not media or media['content_type'] != 'url':
-        flash('Inhalt nicht gefunden oder kein Website-Typ', 'error')
-        return redirect(url_for('admin'))
-    update_media_scale_to_fit(media_id, not media['scale_to_fit'])
-    return redirect(url_for('admin'))
 
 
 @app.route('/admin/media/<int:media_id>/youtube-options', methods=['POST'])
