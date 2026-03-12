@@ -164,13 +164,14 @@ def render_pdf_for_all_displays(filepath, media_id):
 
 # ---------- URL helpers ----------
 
-def make_youtube_embed_with_params(video_id, controls=False, cc=False, cc_lang='', rel=False):
+def make_youtube_embed_with_params(video_id, controls=False, cc=False, cc_lang='', rel=False, vq='hd1080'):
     """Build a YouTube embed URL from a video ID and display options."""
     params = [
         'autoplay=1', 'mute=1', 'loop=1', f'playlist={video_id}',
         f'controls={"1" if controls else "0"}',
         f'rel={"1" if rel else "0"}',
         'iv_load_policy=3',  # hide annotations
+        f'vq={vq}',          # quality hint (may be ignored by YouTube)
     ]
     if cc:
         params.append('cc_load_policy=1')
@@ -198,9 +199,10 @@ def parse_youtube_params(embed_url):
             'cc':       'cc_load_policy' in params,
             'cc_lang':  params.get('cc_lang_pref', [''])[0],
             'rel':      params.get('rel', ['0'])[0] == '1',
+            'vq':       params.get('vq', ['hd1080'])[0],
         }
     except Exception:
-        return {'controls': False, 'cc': False, 'cc_lang': '', 'rel': False}
+        return {'controls': False, 'cc': False, 'cc_lang': '', 'rel': False, 'vq': 'hd1080'}
 
 
 def detect_url_content_type(url):
@@ -911,12 +913,17 @@ def youtube_options(media_id):
         return redirect(url_for('admin'))
 
     video_id = m.group(1)
+    valid_vq = {'hd720', 'hd1080', 'hd1440'}
+    vq = request.form.get('vq', 'hd1080')
+    if vq not in valid_vq:
+        vq = 'hd1080'
     new_url = make_youtube_embed_with_params(
         video_id,
         controls='controls' in request.form,
         cc='cc' in request.form,
         cc_lang=request.form.get('cc_lang', ''),
         rel='rel' in request.form,
+        vq=vq,
     )
     update_media_url(media_id, new_url)
     flash('YouTube-Einstellungen gespeichert', 'success')

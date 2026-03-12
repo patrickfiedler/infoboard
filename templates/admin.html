@@ -586,6 +586,14 @@
                                     <input type="checkbox" name="rel" {% if yp.get('rel') %}checked{% endif %}>
                                     Verwandte Videos
                                 </label>
+                                <label>
+                                    Qualität (Hinweis):
+                                    <select name="vq" style="width:auto;padding:4px 8px;">
+                                        <option value="hd720"  {% if yp.get('vq') == 'hd720'  %}selected{% endif %}>720p</option>
+                                        <option value="hd1080" {% if yp.get('vq','hd1080') == 'hd1080' %}selected{% endif %}>1080p</option>
+                                        <option value="hd1440" {% if yp.get('vq') == 'hd1440' %}selected{% endif %}>1440p</option>
+                                    </select>
+                                </label>
                                 <button type="submit" class="btn-sm btn-success">Speichern</button>
                             </form>
                         </td>
