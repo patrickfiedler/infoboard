@@ -1,10 +1,12 @@
 import os
 import re
 import uuid
+import math
 import glob as glob_module
 import subprocess
 import threading
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests as http_requests
 from urllib.parse import urlparse, parse_qs
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, abort, Response
@@ -156,6 +158,46 @@ def _dpi_for_display(width, height):
     return max(100, min(300, dpi))
 
 
+_CPU_WORKERS = max(1, os.cpu_count() or 1)
+
+
+def _pdf_page_count(filepath):
+    """Return page count via pdfinfo, or None if unavailable."""
+    try:
+        result = subprocess.run(
+            ['pdfinfo', filepath], capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if line.startswith('Pages:'):
+                    return int(line.split(':', 1)[1].strip())
+    except (FileNotFoundError, ValueError, OSError):
+        pass
+    return None
+
+
+def _render_pdf_chunk(filepath, dpi, first_page, last_page, prefix_path):
+    """Run pdftoppm for a page range. Returns sorted list of output paths."""
+    try:
+        result = subprocess.run(
+            ['pdftoppm', '-r', str(dpi),
+             '-f', str(first_page), '-l', str(last_page),
+             '-png', filepath, prefix_path],
+            capture_output=True, text=True, timeout=120
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            'pdftoppm nicht gefunden. Bitte poppler-utils installieren: '
+            'sudo apt install poppler-utils'
+        )
+    if result.returncode != 0:
+        raise RuntimeError(f'pdftoppm Fehler: {result.stderr.strip()}')
+    return sorted(
+        glob_module.glob(f'{prefix_path}-*.png'),
+        key=lambda p: int(re.search(r'-(\d+)\.png$', p).group(1))
+    )
+
+
 def _find_same_dpi_renders(media_id, dpi, exclude_display_id):
     """Return (display_id, renders) from any other display at the same DPI, or (None, [])."""
     for d in get_all_displays():
@@ -206,28 +248,29 @@ def render_pdf_for_display(filepath, media_id, display):
         # If we broke out (missing source files), clear partial records and fall through
         delete_pdf_renders(media_id, display_id)
 
-    prefix = str(uuid.uuid4())
-    prefix_path = os.path.join(render_dir, prefix)
+    page_count = _pdf_page_count(filepath)
+    workers = min(page_count, _CPU_WORKERS) if page_count else 1
 
-    try:
-        result = subprocess.run(
-            ['pdftoppm', '-r', str(dpi), '-png', filepath, prefix_path],
-            capture_output=True, text=True, timeout=120
-        )
-    except FileNotFoundError:
-        raise RuntimeError(
-            'pdftoppm nicht gefunden. Bitte poppler-utils installieren: '
-            'sudo apt install poppler-utils'
-        )
-
-    if result.returncode != 0:
-        raise RuntimeError(f'pdftoppm Fehler: {result.stderr.strip()}')
-
-    # Sort pages numerically (pdftoppm pads with leading zeros)
-    pages = sorted(
-        glob_module.glob(f'{prefix_path}-*.png'),
-        key=lambda p: int(re.search(r'-(\d+)\.png$', p).group(1))
-    )
+    if workers > 1:
+        chunk_size = math.ceil(page_count / workers)
+        chunks = [
+            (w * chunk_size + 1, min((w + 1) * chunk_size, page_count))
+            for w in range(workers)
+            if w * chunk_size + 1 <= page_count
+        ]
+        prefixes = [os.path.join(render_dir, str(uuid.uuid4())) for _ in chunks]
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(_render_pdf_chunk, filepath, dpi, f, l, p): idx
+                for idx, ((f, l), p) in enumerate(zip(chunks, prefixes))
+            }
+            chunk_results = [None] * len(chunks)
+            for future in as_completed(futures):
+                chunk_results[futures[future]] = future.result()  # raises on error
+        pages = [path for chunk in chunk_results for path in chunk]
+    else:
+        pages = _render_pdf_chunk(filepath, dpi, 1, page_count or 99999,
+                                   os.path.join(render_dir, str(uuid.uuid4())))
 
     if not pages:
         raise RuntimeError('pdftoppm hat keine Seiten ausgegeben — ist die PDF-Datei gültig?')
@@ -267,31 +310,34 @@ def _render_pdf_spreads(pages, media_id, display_id, render_dir):
     if n == 0:
         return
 
-    # Spread type 'paired': (1+2), (3+4), ...
+    # Build all stitch tasks up front: (left, right, output_path, spread_type, spread_num)
+    tasks = []
     prefix_p = str(uuid.uuid4())
-    spread_num = 1
-    i = 0
+    prefix_b = str(uuid.uuid4())
+
+    i, num = 0, 1
     while i < n:
-        out = os.path.join(render_dir, f'{prefix_p}-{spread_num}.png')
-        _stitch_spread(pages[i], pages[i + 1] if i + 1 < n else None, out)
-        add_pdf_spread_render(media_id, display_id, 'paired', spread_num, os.path.basename(out))
-        spread_num += 1
+        out = os.path.join(render_dir, f'{prefix_p}-{num}.png')
+        tasks.append((pages[i], pages[i + 1] if i + 1 < n else None, out, 'paired', num))
+        num += 1
         i += 2
 
-    # Spread type 'book': (1), (2+3), (4+5), ...
-    prefix_b = str(uuid.uuid4())
-    spread_num = 1
-    out = os.path.join(render_dir, f'{prefix_b}-{spread_num}.png')
-    _stitch_spread(pages[0], None, out)
-    add_pdf_spread_render(media_id, display_id, 'book', spread_num, os.path.basename(out))
-    spread_num += 1
-    i = 1
+    tasks.append((pages[0], None, os.path.join(render_dir, f'{prefix_b}-1.png'), 'book', 1))
+    i, num = 1, 2
     while i < n:
-        out = os.path.join(render_dir, f'{prefix_b}-{spread_num}.png')
-        _stitch_spread(pages[i], pages[i + 1] if i + 1 < n else None, out)
-        add_pdf_spread_render(media_id, display_id, 'book', spread_num, os.path.basename(out))
-        spread_num += 1
+        out = os.path.join(render_dir, f'{prefix_b}-{num}.png')
+        tasks.append((pages[i], pages[i + 1] if i + 1 < n else None, out, 'book', num))
+        num += 1
         i += 2
+
+    # Stitch all pairs in parallel (I/O-bound: PNG read/write releases GIL)
+    with ThreadPoolExecutor(max_workers=_CPU_WORKERS) as pool:
+        futures = [pool.submit(_stitch_spread, left, right, out) for left, right, out, _, _ in tasks]
+        for f in as_completed(futures):
+            f.result()  # propagate exceptions
+
+    for _, _, out, spread_type, num in tasks:
+        add_pdf_spread_render(media_id, display_id, spread_type, num, os.path.basename(out))
 
 
 def render_pdf_for_all_displays(filepath, media_id):
