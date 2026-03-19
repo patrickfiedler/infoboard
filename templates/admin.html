@@ -378,6 +378,23 @@
                             <button type="submit" class="btn-success">Speichern</button>
                             <small style="color:#999;margin-left:10px;">Auflösungsänderung rendert alle PDFs neu.</small>
                         </form>
+
+                        <hr style="margin:14px 0;border:none;border-top:1px solid #eee;">
+                        <h3>Layout</h3>
+                        <form method="POST" action="{{ url_for('update_display_layout', display_id=d.id) }}">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <select name="layout_preset" required>
+                                        {% for key, preset in layout_presets.items() %}
+                                        <option value="{{ key }}" {% if d.layout_preset == key %}selected{% endif %}>{{ preset.label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <button type="submit" class="btn-secondary">Anwenden</button>
+                                </div>
+                            </div>
+                        </form>
                     </div>
 
                     <!-- Playlist column -->
@@ -463,6 +480,101 @@
                         </form>
                     </div>
                 </div>
+
+                {% if d.layout_preset and d.layout_preset != 'fullscreen' %}
+                {% set zones = display_zones.get(d.id, []) %}
+                {% set preset_info = layout_presets.get(d.layout_preset, {}) %}
+                <div class="zone-panels" style="border-top:1px solid #eee;">
+                    {% for zone in zones %}
+                    {% set zone_label = preset_info.zone_labels[zone.zone_index] if zone.zone_index < (preset_info.zone_labels|length) else ('Zone ' ~ zone.zone_index) %}
+                    {% set zpl = zone_playlists.get(zone.id, []) %}
+                    <div class="zone-panel" style="border-bottom:1px solid #f0f0f0;padding:12px 16px;">
+                        <div style="font-size:13px;font-weight:700;color:#667eea;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">
+                            Zone {{ zone.zone_index }}: {{ zone_label }}
+                        </div>
+                        <div class="display-card-columns" style="border-top:none;">
+                            <!-- Zone settings -->
+                            <div class="card-col-settings" style="background:#f5f7ff;">
+                                <h3>Einzel &amp; Interval</h3>
+                                <form method="POST" action="{{ url_for('update_zone_settings_route', zone_id=zone.id) }}">
+                                    <div class="form-row" style="margin-bottom:10px;">
+                                        <div class="form-group">
+                                            <label>Einzelinhalt</label>
+                                            <select name="selected_media_id">
+                                                <option value="0" {% if zone.selected_media_id == 0 %}selected{% endif %}>— Neueste automatisch —</option>
+                                                {% for item in all_media %}
+                                                <option value="{{ item.id }}" {% if zone.selected_media_id == item.id %}selected{% endif %}>
+                                                    {{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})
+                                                </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="form-group form-group-sm">
+                                            <label>Interval (s)</label>
+                                            <input type="number" name="cycle_interval" value="{{ zone.cycle_interval }}" min="1" required>
+                                        </div>
+                                        <div>
+                                            <label>&nbsp;</label>
+                                            <button type="submit" class="btn-success">Speichern</button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                            <!-- Zone playlist -->
+                            <div class="card-col-playlist">
+                                <h3>Playlist</h3>
+                                {% if not zpl %}
+                                <p style="color:#999;font-size:13px;margin-bottom:12px;" class="zone-playlist-empty-{{ zone.id }}">Noch keine Einträge.</p>
+                                {% endif %}
+                                <table class="playlist-table" {% if not zpl %}style="display:none;"{% endif %}>
+                                    <tbody class="zone-playlist-sortable" data-zone="{{ zone.id }}">
+                                    {% for pi in zpl %}
+                                    <tr data-id="{{ pi.id }}">
+                                        <td class="drag-handle">☰</td>
+                                        <td>
+                                            <span class="badge badge-{{ pi.content_type }}" style="font-size:10px;">{{ type_labels.get(pi.content_type, pi.content_type) }}</span>
+                                            {{ pi.original_name }}
+                                        </td>
+                                        <td class="dur-cell">
+                                            <input type="number" class="dur-input zone-dur-input" data-zone="{{ zone.id }}" data-item="{{ pi.id }}"
+                                                   value="{{ pi.duration }}" min="1">
+                                            <span style="font-size:12px;color:#999;">s</span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-danger zone-remove-item"
+                                                    data-zone="{{ zone.id }}" data-item="{{ pi.id }}">✕</button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                                <form class="zone-playlist-add-form" data-zone="{{ zone.id }}" style="margin-top:8px;">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Inhalt</label>
+                                            <select name="media_id" required>
+                                                {% for item in all_media %}
+                                                <option value="{{ item.id }}">{{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="form-group form-group-sm">
+                                            <label>Dauer (s)</label>
+                                            <input type="number" name="duration" value="10" min="1" required>
+                                        </div>
+                                        <div>
+                                            <label>&nbsp;</label>
+                                            <button type="submit">Hinzufügen</button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
             </div>
             {% endfor %}
         </div>
@@ -1033,6 +1145,106 @@
             btn.textContent = 'Bilder (' + count + ')';
         });
     }
+
+    // === Zone playlist ===
+
+    // Duration auto-save for zone items
+    document.addEventListener('change', function(e) {
+        if (!e.target.classList.contains('zone-dur-input')) return;
+        var zoneId = e.target.dataset.zone;
+        var itemId = e.target.dataset.item;
+        var duration = parseInt(e.target.value);
+        if (!duration || duration < 1) return;
+        fetch('/admin/zone/' + zoneId + '/playlist/item/' + itemId + '/duration', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+            body: 'duration=' + duration
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            var cell = e.target.closest('.dur-cell');
+            var saved = cell.querySelector('.dur-saved');
+            if (!saved) {
+                saved = document.createElement('span');
+                saved.className = 'dur-saved';
+                saved.style.cssText = 'font-size:11px;display:block;transition:opacity 0.5s;';
+                cell.appendChild(saved);
+            }
+            e.target.style.borderColor = data.ok ? '#28a745' : '#dc3545';
+            saved.style.opacity = '1';
+            saved.style.color = data.ok ? '#28a745' : '#dc3545';
+            saved.textContent = data.ok ? 'gespeichert' : 'Fehler';
+            clearTimeout(saved._t);
+            saved._t = setTimeout(function() {
+                e.target.style.borderColor = '';
+                saved.style.opacity = '0';
+            }, 1500);
+        });
+    });
+
+    // Remove zone item
+    document.addEventListener('click', function(e) {
+        if (!e.target.classList.contains('zone-remove-item')) return;
+        var zoneId = e.target.dataset.zone;
+        var itemId = e.target.dataset.item;
+        fetch('/admin/zone/' + zoneId + '/playlist/item/' + itemId + '/remove', {
+            method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            if (!data.ok) return;
+            var tr = e.target.closest('tr');
+            var tbody = tr.closest('tbody');
+            tr.remove();
+            if (tbody.querySelectorAll('tr').length === 0) {
+                tbody.closest('table').style.display = 'none';
+                var empty = document.querySelector('.zone-playlist-empty-' + zoneId);
+                if (empty) empty.style.display = '';
+            }
+        });
+    });
+
+    // Zone SortableJS init
+    document.querySelectorAll('.zone-playlist-sortable').forEach(function(tbody) {
+        Sortable.create(tbody, {
+            handle: '.drag-handle',
+            animation: 150,
+            onEnd: function() {
+                var zoneId = tbody.dataset.zone;
+                var ids = Array.from(tbody.querySelectorAll('tr')).map(function(r) { return parseInt(r.dataset.id); });
+                fetch('/admin/zone/' + zoneId + '/playlist/reorder', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: JSON.stringify({order: ids})
+                });
+            }
+        });
+    });
+
+    // Add item to zone playlist via AJAX
+    document.querySelectorAll('.zone-playlist-add-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var zoneId = form.dataset.zone;
+            var data = new FormData(form);
+            fetch('/admin/zone/' + zoneId + '/playlist/add', {
+                method: 'POST',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                body: new URLSearchParams(data)
+            }).then(function(r) { return r.json(); }).then(function(item) {
+                if (!item.ok) return;
+                var tbody = document.querySelector('.zone-playlist-sortable[data-zone="' + zoneId + '"]');
+                var tr = document.createElement('tr');
+                tr.dataset.id = item.id;
+                tr.innerHTML =
+                    '<td class="drag-handle">☰</td>' +
+                    '<td><span class="badge badge-' + item.content_type + '" style="font-size:10px;">' + item.content_type + '</span> ' + escHtml(item.original_name) + '</td>' +
+                    '<td class="dur-cell"><input type="number" class="dur-input zone-dur-input" data-zone="' + zoneId + '" data-item="' + item.id + '" value="' + item.duration + '" min="1"> <span style="font-size:12px;color:#999;">s</span></td>' +
+                    '<td><button class="btn btn-sm btn-danger zone-remove-item" data-zone="' + zoneId + '" data-item="' + item.id + '">✕</button></td>';
+                tbody.appendChild(tr);
+                tbody.closest('table').style.display = '';
+                var empty = document.querySelector('.zone-playlist-empty-' + zoneId);
+                if (empty) empty.style.display = 'none';
+                form.reset();
+            });
+        });
+    });
 </script>
 </body>
 </html>

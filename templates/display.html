@@ -13,125 +13,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
-        #content-container {
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-        }
-
-        #content-container img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            display: block;
-        }
-
-        #content-container video {
-            width: 100vw;
-            height: 100vh;
-            object-fit: contain; /* overridden dynamically via JS */
-        }
-
-        #content-container iframe {
-            width: 100vw;
-            height: 100vh;
-            border: none;
-        }
-
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #888;
-            font-size: 20px;
-            text-align: center;
-        }
-
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            border-top: 4px solid #888;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 12px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        #error {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #ff6b6b;
-            font-size: 18px;
-            text-align: center;
-            display: none;
-            max-width: 80%;
-        }
-
-        #countdown {
-            position: fixed;
-            bottom: 15px;
-            right: 15px;
-            font-size: 14px;
-            color: rgba(80, 80, 80, 0.7);
-            font-weight: 300;
-            display: none;
-            user-select: none;
-        }
-
-        #progress-container {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            display: none;
-            background: rgba(0, 0, 0, 0.05);
-            padding: 8px 15px;
-            box-sizing: border-box;
-        }
-
-        #progress-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        #progress-bar-bg {
-            flex: 1;
-            height: 4px;
-            background: rgba(200, 200, 200, 0.3);
-            border-radius: 2px;
-            overflow: hidden;
-        }
-
-        #progress-bar-fill {
-            height: 100%;
-            background: rgba(100, 100, 100, 0.5);
-            width: 100%;
-            transform: scaleX(0);
-            transform-origin: left center;
-            transition: transform 1s linear;
-            border-radius: 2px;
-        }
-
-        #page-indicator {
-            font-size: 12px;
-            color: rgba(100, 100, 100, 0.7);
-            font-weight: 400;
-            white-space: nowrap;
-        }
-
-        /* Ambient background */
+        /* Ambient background (global, behind all zones) */
         #ambient-bg {
             position: fixed;
             inset: 0;
@@ -155,85 +37,210 @@
             inset: 0;
             background: radial-gradient(ellipse at center, transparent 20%, rgba(0,0,0,0.7) 100%);
         }
-        #content-container { position: relative; z-index: 1; }
 
-        /* Subtle: flush 2px bar, no background track, no text */
-        #progress-container.subtle {
-            background: transparent;
-            padding: 0;
+        /* Zone base */
+        .zone {
+            position: absolute;
+            overflow: hidden;
+            z-index: 1;
         }
-        #progress-container.subtle #progress-bar-bg {
+
+        /* Zone internals */
+        .zone-loading {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #888; font-size: 20px;
+            text-align: center; z-index: 10;
+        }
+        .zone-error {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff6b6b; font-size: 18px;
+            text-align: center; z-index: 10;
+            max-width: 80%;
+        }
+        .zone-content {
+            position: absolute; inset: 0;
+            display: flex; justify-content: center; align-items: center;
+            overflow: hidden; z-index: 1;
+        }
+        .zone-content img {
+            max-width: 100%; max-height: 100%;
+            object-fit: contain; display: block;
+        }
+        .zone-content video { width: 100%; height: 100%; object-fit: contain; }
+        .zone-content iframe { width: 100%; height: 100%; border: none; }
+
+        .zone-countdown {
+            position: absolute;
+            bottom: 15px; right: 15px;
+            font-size: 14px; color: rgba(80, 80, 80, 0.7);
+            font-weight: 300; z-index: 10;
+            user-select: none;
+        }
+        .zone-progress {
+            position: absolute;
+            bottom: 0; left: 0; width: 100%;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 8px 15px; z-index: 10;
+            box-sizing: border-box;
+        }
+        .zone-progress-inner {
+            display: flex; align-items: center; gap: 15px;
+        }
+        .zone-progress-bar-bg {
+            flex: 1; height: 4px;
+            background: rgba(200, 200, 200, 0.3);
+            border-radius: 2px; overflow: hidden;
+        }
+        .zone-progress-fill {
+            height: 100%;
+            background: rgba(100, 100, 100, 0.5);
+            width: 100%;
+            transform: scaleX(0);
+            transform-origin: left center;
+            transition: transform 1s linear;
+            border-radius: 2px;
+        }
+        .zone-page-indicator {
+            font-size: 12px;
+            color: rgba(100, 100, 100, 0.7);
+            font-weight: 400; white-space: nowrap;
+        }
+
+        /* Subtle progress variant */
+        .zone-progress.subtle { background: transparent; padding: 0; }
+        .zone-progress.subtle .zone-progress-bar-bg {
             height: 2px;
             background: rgba(150, 150, 150, 0.2);
             border-radius: 0;
         }
-        #progress-container.subtle #progress-bar-fill {
+        .zone-progress.subtle .zone-progress-fill {
             background: rgba(80, 80, 80, 0.55);
             border-radius: 0;
         }
-        #progress-container.subtle #page-indicator { display: none; }
+        .zone-progress.subtle .zone-page-indicator { display: none; }
+
+        /* Spinner */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-top: 4px solid #888;
+            border-radius: 50%;
+            width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* ===== Layout presets ===== */
+
+        /* fullscreen */
+        body.layout-fullscreen .zone {
+            top: 0; left: 0; width: 100%; height: 100%;
+        }
+
+        /* split-h: two equal columns */
+        body.layout-split-h .zone-split-h-0 { top: 0; left: 0;   width: 50%; height: 100%; }
+        body.layout-split-h .zone-split-h-1 { top: 0; left: 50%; width: 50%; height: 100%; }
+
+        /* split-v: two equal rows */
+        body.layout-split-v .zone-split-v-0 { top: 0;   left: 0; width: 100%; height: 50%; }
+        body.layout-split-v .zone-split-v-1 { top: 50%; left: 0; width: 100%; height: 50%; }
+
+        /* sidebar-r: 70% main + 30% right sidebar */
+        body.layout-sidebar-r .zone-sidebar-r-0 { top: 0; left: 0;   width: 70%; height: 100%; }
+        body.layout-sidebar-r .zone-sidebar-r-1 { top: 0; left: 70%; width: 30%; height: 100%; }
+
+        /* sidebar-b: 75% main + 25% bottom ticker */
+        body.layout-sidebar-b .zone-sidebar-b-0 { top: 0;   left: 0; width: 100%; height: 75%; }
+        body.layout-sidebar-b .zone-sidebar-b-1 { top: 75%; left: 0; width: 100%; height: 25%; }
+
+        /* thirds-h: three equal columns */
+        body.layout-thirds-h .zone-thirds-h-0 { top: 0; left: 0;       width: 33.33%; height: 100%; }
+        body.layout-thirds-h .zone-thirds-h-1 { top: 0; left: 33.33%;  width: 33.33%; height: 100%; }
+        body.layout-thirds-h .zone-thirds-h-2 { top: 0; left: 66.66%;  width: 33.34%; height: 100%; }
+
+        /* quad: 2×2 grid */
+        body.layout-quad .zone-quad-0 { top: 0;   left: 0;   width: 50%; height: 50%; }
+        body.layout-quad .zone-quad-1 { top: 0;   left: 50%; width: 50%; height: 50%; }
+        body.layout-quad .zone-quad-2 { top: 50%; left: 0;   width: 50%; height: 50%; }
+        body.layout-quad .zone-quad-3 { top: 50%; left: 50%; width: 50%; height: 50%; }
     </style>
 </head>
-<body>
+<body class="layout-{{ layout_preset }}">
     <div id="ambient-bg">
         <img id="ambient-img" src="" alt="">
         <div id="ambient-vignette"></div>
     </div>
-    <div id="loading">
-        <div class="spinner"></div>
-        Wird geladen...
-    </div>
-    <div id="error"></div>
-    <div id="countdown"></div>
-    <div id="progress-container">
-        <div id="progress-wrapper">
-            <div id="progress-bar-bg">
-                <div id="progress-bar-fill"></div>
+
+    {% for zi in range(zone_count) %}
+    <div id="zone-{{ zi }}" class="zone zone-{{ layout_preset }}-{{ zi }}">
+        <div class="zone-loading"><div class="spinner"></div>Wird geladen...</div>
+        <div class="zone-error" style="display:none;"></div>
+        <div class="zone-content"></div>
+        <div class="zone-countdown" style="display:none;"></div>
+        <div class="zone-progress" style="display:none;">
+            <div class="zone-progress-inner">
+                <div class="zone-progress-bar-bg">
+                    <div class="zone-progress-fill"></div>
+                </div>
+                <span class="zone-page-indicator"></span>
             </div>
-            <span id="page-indicator"></span>
         </div>
     </div>
-    <div id="content-container"></div>
+    {% endfor %}
 
     <script>
-        const DISPLAY_SLUG = {{ slug | tojson }};
-        const API_URL = '/api/display/' + DISPLAY_SLUG;
+        var DISPLAY_SLUG = {{ slug | tojson }};
 
-        const container = document.getElementById('content-container');
-        const loadingDiv = document.getElementById('loading');
-        const errorDiv = document.getElementById('error');
-        const countdownDiv = document.getElementById('countdown');
-        const progressContainer = document.getElementById('progress-container');
-        const progressBarFill = document.getElementById('progress-bar-fill');
-        const pageIndicator = document.getElementById('page-indicator');
-        const ambientBg = document.getElementById('ambient-bg');
-        const ambientImg = document.getElementById('ambient-img');
+        function SlideEngine(zoneEl, apiUrl, opts) {
+            this.zoneEl          = zoneEl;
+            this.apiUrl          = apiUrl;
+            this.contentEl       = zoneEl.querySelector('.zone-content');
+            this.loadingEl       = zoneEl.querySelector('.zone-loading');
+            this.errorEl         = zoneEl.querySelector('.zone-error');
+            this.countdownEl     = zoneEl.querySelector('.zone-countdown');
+            this.progressEl      = zoneEl.querySelector('.zone-progress');
+            this.progressFillEl  = zoneEl.querySelector('.zone-progress-fill');
+            this.pageIndicatorEl = zoneEl.querySelector('.zone-page-indicator');
+            this.ambientBgEl     = (opts && opts.ambientBgEl)  || null;
+            this.ambientImgEl    = (opts && opts.ambientImgEl) || null;
 
-        // --- State ---
-        var slides = [];           // flat array of slide objects (see buildSlides)
-        var slideIndex = 0;
-        var slideTimer = null;     // setTimeout for advancing to next slide
-        var countdownTimer = null; // setInterval for progress display
-        var elapsedSeconds = 0;
-        var countdownSeconds = 0;
-        var currentSlideDuration = 0;
-        var progressIndicator = 'progress';
-        var currentStateKey = null;
-        var ambientBgEnabled = false;
-
-        // --- Ambient background ---
-        function setAmbientBg(url) {
-            ambientImg.src = url;
-            ambientBg.classList.add('visible');
-        }
-        function clearAmbientBg() {
-            ambientBg.classList.remove('visible');
+            this.slides              = [];
+            this.slideIndex          = 0;
+            this.slideTimer          = null;
+            this.countdownTimer      = null;
+            this.elapsedSeconds      = 0;
+            this.countdownSeconds    = 0;
+            this.currentSlideDuration = 0;
+            this.progressIndicator   = 'progress';
+            this.currentStateKey     = null;
+            this.ambientBgEnabled    = false;
         }
 
-        // A slide: { type, url, duration, video_fit, scale_to_fit }
-        // duration = seconds (Infinity = show until content changes, e.g. single non-PDF item)
+        SlideEngine.prototype.start = function() {
+            var self = this;
+            this.poll();
+            setInterval(function() { self.poll(); }, 10000);
+        };
 
-        function buildSlides(data) {
+        SlideEngine.prototype.setAmbientBg = function(url) {
+            if (!this.ambientBgEl) return;
+            this.ambientImgEl.src = url;
+            this.ambientBgEl.classList.add('visible');
+        };
+
+        SlideEngine.prototype.clearAmbientBg = function() {
+            if (!this.ambientBgEl) return;
+            this.ambientBgEl.classList.remove('visible');
+        };
+
+        SlideEngine.prototype.buildSlides = function(data) {
             if (data.mode === 'playlist') {
                 var result = [];
                 (data.items || []).forEach(function(item) {
@@ -256,7 +263,6 @@
                 });
                 return result;
             }
-            // Single-item mode
             var ct = data.content_type;
             var interval = data.cycle_interval || 10;
             if (ct === 'pdf' || ct === 'gallery') {
@@ -268,9 +274,9 @@
             return [{ type: ct, url: data.url, duration: Infinity,
                       video_fit: data.video_fit || 'contain',
                       scale_to_fit: data.scale_to_fit || false }];
-        }
+        };
 
-        function getStateKey(data) {
+        SlideEngine.prototype.getStateKey = function(data) {
             if (data.mode === 'playlist') {
                 return 'playlist:' + (data.items || []).map(function(i) {
                     return (i.content_type || '') + ':' + (i.url || (i.pages && i.pages[0]) || '') + ':' + i.duration;
@@ -279,49 +285,48 @@
             if (data.content_type === 'pdf' || data.content_type === 'gallery')
                 return data.content_type + ':' + data.cycle_interval + ':' + ((data.pages && data.pages[0]) || '');
             return (data.content_type || '') + ':' + (data.url || '');
-        }
+        };
 
-        // --- Rendering ---
+        SlideEngine.prototype.showError = function(msg) {
+            this.loadingEl.style.display = 'none';
+            this.errorEl.textContent = msg;
+            this.errorEl.style.display = 'block';
+        };
 
-        function showError(msg) {
-            loadingDiv.style.display = 'none';
-            errorDiv.textContent = msg;
-            errorDiv.style.display = 'block';
-        }
+        SlideEngine.prototype.renderSlide = function(slide) {
+            var self = this;
+            this.contentEl.innerHTML = '';
+            this.errorEl.style.display = 'none';
+            this.loadingEl.style.display = 'block';
 
-        function renderSlide(slide) {
-            container.innerHTML = '';
-            errorDiv.style.display = 'none';
-            loadingDiv.style.display = 'block';
-
-            if (ambientBgEnabled && slide.type === 'image') {
-                setAmbientBg(slide.url);
+            if (this.ambientBgEnabled && slide.type === 'image') {
+                this.setAmbientBg(slide.url);
             } else {
-                clearAmbientBg();
+                this.clearAmbientBg();
             }
 
             if (slide.type === 'pdf-page' || slide.type === 'image') {
                 var img = document.createElement('img');
                 img.src = slide.url;
-                img.onload = function() { loadingDiv.style.display = 'none'; };
-                img.onerror = function() { showError('Bild konnte nicht geladen werden'); };
-                container.appendChild(img);
+                img.onload  = function() { self.loadingEl.style.display = 'none'; };
+                img.onerror = function() { self.showError('Bild konnte nicht geladen werden'); };
+                this.contentEl.appendChild(img);
 
             } else if (slide.type === 'video') {
                 var video = document.createElement('video');
                 video.src = slide.url;
                 video.autoplay = true; video.loop = true; video.muted = true; video.playsInline = true;
                 video.style.objectFit = slide.video_fit || 'contain';
-                video.oncanplay = function() { loadingDiv.style.display = 'none'; };
-                video.onerror = function() { showError('Video konnte nicht geladen werden'); };
-                container.appendChild(video);
+                video.oncanplay = function() { self.loadingEl.style.display = 'none'; };
+                video.onerror  = function() { self.showError('Video konnte nicht geladen werden'); };
+                this.contentEl.appendChild(video);
 
             } else if (slide.type === 'youtube') {
                 var iframe = document.createElement('iframe');
                 iframe.src = slide.url;
                 iframe.allow = 'autoplay; fullscreen';
-                iframe.onload = function() { loadingDiv.style.display = 'none'; };
-                container.appendChild(iframe);
+                iframe.onload = function() { self.loadingEl.style.display = 'none'; };
+                this.contentEl.appendChild(iframe);
 
             } else if (slide.type === 'url') {
                 var iframe = document.createElement('iframe');
@@ -329,101 +334,111 @@
                 if (slide.scale_to_fit) src += '&scale=fit';
                 iframe.src = src;
                 iframe.allow = 'autoplay; fullscreen';
-                iframe.onload = function() { loadingDiv.style.display = 'none'; };
-                container.appendChild(iframe);
+                iframe.onload = function() { self.loadingEl.style.display = 'none'; };
+                this.contentEl.appendChild(iframe);
             }
-        }
+        };
 
-        // --- Progress indicator ---
-
-        function updateProgress() {
-            var total = slides.length;
-            var finite = isFinite(currentSlideDuration);
-            progressContainer.classList.remove('subtle');
+        SlideEngine.prototype.updateProgress = function() {
+            var total  = this.slides.length;
+            var finite = isFinite(this.currentSlideDuration);
+            this.progressEl.classList.remove('subtle');
 
             if (total <= 1 || !finite) {
-                countdownDiv.style.display = 'none';
-                progressContainer.style.display = 'none';
+                this.countdownEl.style.display  = 'none';
+                this.progressEl.style.display   = 'none';
                 return;
             }
-            if (progressIndicator === 'countdown') {
-                countdownDiv.textContent = countdownSeconds + 's';
-                countdownDiv.style.display = 'block';
-                progressContainer.style.display = 'none';
-            } else if (progressIndicator === 'progress' || progressIndicator === 'subtle') {
-                if (progressIndicator === 'subtle') progressContainer.classList.add('subtle');
-                if (progressIndicator === 'progress') pageIndicator.textContent = (slideIndex + 1) + ' / ' + total;
-                progressBarFill.style.transform = 'scaleX(' + ((elapsedSeconds + 1) / currentSlideDuration) + ')';
-                countdownDiv.style.display = 'none';
-                progressContainer.style.display = 'block';
+            if (this.progressIndicator === 'countdown') {
+                this.countdownEl.textContent   = this.countdownSeconds + 's';
+                this.countdownEl.style.display = 'block';
+                this.progressEl.style.display  = 'none';
+            } else if (this.progressIndicator === 'progress' || this.progressIndicator === 'subtle') {
+                if (this.progressIndicator === 'subtle') this.progressEl.classList.add('subtle');
+                if (this.progressIndicator === 'progress')
+                    this.pageIndicatorEl.textContent = (this.slideIndex + 1) + ' / ' + total;
+                this.progressFillEl.style.transform = 'scaleX(' + ((this.elapsedSeconds + 1) / this.currentSlideDuration) + ')';
+                this.countdownEl.style.display  = 'none';
+                this.progressEl.style.display   = 'block';
             } else {
-                countdownDiv.style.display = 'none';
-                progressContainer.style.display = 'none';
+                this.countdownEl.style.display  = 'none';
+                this.progressEl.style.display   = 'none';
             }
-        }
+        };
 
-        // --- Slide cycling ---
+        SlideEngine.prototype.stopAll = function() {
+            if (this.slideTimer)    { clearTimeout(this.slideTimer);       this.slideTimer = null; }
+            if (this.countdownTimer){ clearInterval(this.countdownTimer);  this.countdownTimer = null; }
+            this.countdownEl.style.display = 'none';
+            this.progressEl.style.display  = 'none';
+        };
 
-        function stopAll() {
-            if (slideTimer)    { clearTimeout(slideTimer);  slideTimer = null; }
-            if (countdownTimer){ clearInterval(countdownTimer); countdownTimer = null; }
-            countdownDiv.style.display = 'none';
-            progressContainer.style.display = 'none';
-        }
+        SlideEngine.prototype.startSlide = function(index) {
+            var self = this;
+            this.stopAll();
+            if (!this.slides.length) return;
+            this.slideIndex = index % this.slides.length;
+            var slide = this.slides[this.slideIndex];
+            this.renderSlide(slide);
+            if (this.slides.length <= 1 || !isFinite(slide.duration)) return;
 
-        function startSlide(index) {
-            stopAll();
-            if (!slides.length) return;
-            slideIndex = index % slides.length;
-            var slide = slides[slideIndex];
-            renderSlide(slide);
-            if (slides.length <= 1 || !isFinite(slide.duration)) return;
-
-            currentSlideDuration = slide.duration;
-            countdownSeconds = slide.duration;
-            elapsedSeconds = 0;
-            updateProgress();
-            countdownTimer = setInterval(function() {
-                countdownSeconds = Math.max(0, countdownSeconds - 1);
-                elapsedSeconds++;
-                updateProgress();
+            this.currentSlideDuration = slide.duration;
+            this.countdownSeconds     = slide.duration;
+            this.elapsedSeconds       = 0;
+            this.updateProgress();
+            this.countdownTimer = setInterval(function() {
+                self.countdownSeconds = Math.max(0, self.countdownSeconds - 1);
+                self.elapsedSeconds++;
+                self.updateProgress();
             }, 1000);
-            slideTimer = setTimeout(function() {
-                startSlide((slideIndex + 1) % slides.length);
+            this.slideTimer = setTimeout(function() {
+                self.startSlide((self.slideIndex + 1) % self.slides.length);
             }, slide.duration * 1000);
-        }
+        };
 
-        // --- Polling ---
-
-        function poll() {
-            fetch(API_URL)
-                .then(function(r) {
-                    if (!r.ok) throw new Error();
-                    return r.json();
-                })
+        SlideEngine.prototype.poll = function() {
+            var self = this;
+            fetch(this.apiUrl)
+                .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
                 .then(function(data) {
                     document.body.style.backgroundColor = data.background_color || '#ffffff';
-                    ambientBgEnabled = !!data.ambient_bg;
+                    self.ambientBgEnabled = !!data.ambient_bg;
                     var newIndicator = data.progress_indicator || 'progress';
-                    var newKey = getStateKey(data);
+                    var newKey = self.getStateKey(data);
 
-                    if (newKey !== currentStateKey) {
-                        currentStateKey = newKey;
-                        progressIndicator = newIndicator;
-                        var newSlides = buildSlides(data);
-                        if (!newSlides.length) { showError('Kein Inhalt verfügbar'); return; }
-                        slides = newSlides;
-                        startSlide(0);
-                    } else if (newIndicator !== progressIndicator) {
-                        progressIndicator = newIndicator;
-                        updateProgress();
+                    if (newKey !== self.currentStateKey) {
+                        self.currentStateKey   = newKey;
+                        self.progressIndicator = newIndicator;
+                        var newSlides = self.buildSlides(data);
+                        if (!newSlides.length) { self.showError('Kein Inhalt verfügbar'); return; }
+                        self.slides = newSlides;
+                        self.startSlide(0);
+                    } else if (newIndicator !== self.progressIndicator) {
+                        self.progressIndicator = newIndicator;
+                        self.updateProgress();
                     }
                 })
-                .catch(function() { showError('Kein Inhalt verfügbar'); });
-        }
+                .catch(function() { self.showError('Kein Inhalt verfügbar'); });
+        };
 
-        poll();
-        setInterval(poll, 10000);
+        // --- Init ---
+        var ambientBgEl  = document.getElementById('ambient-bg');
+        var ambientImgEl = document.getElementById('ambient-img');
+
+        {% for zi in range(zone_count) %}
+        (function() {
+            var opts = {};
+            {% if zi == 0 %}
+            opts.ambientBgEl  = ambientBgEl;
+            opts.ambientImgEl = ambientImgEl;
+            {% endif %}
+            new SlideEngine(
+                document.getElementById('zone-{{ zi }}'),
+                '/api/display/' + DISPLAY_SLUG + '/zone/{{ zi }}/current',
+                opts
+            ).start();
+        })();
+        {% endfor %}
     </script>
 </body>
 </html>

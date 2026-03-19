@@ -51,6 +51,12 @@ def init_db():
         except Exception:
             pass  # Column already exists
 
+        # Migrate: add layout_preset column if upgrading from older schema
+        try:
+            conn.execute("ALTER TABLE displays ADD COLUMN layout_preset TEXT NOT NULL DEFAULT 'fullscreen'")
+        except Exception:
+            pass  # Column already exists
+
         conn.execute('''
             CREATE TABLE IF NOT EXISTS media_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,6 +105,29 @@ def init_db():
                 media_id INTEGER NOT NULL,
                 duration INTEGER NOT NULL DEFAULT 10,
                 position INTEGER NOT NULL DEFAULT 0
+            )
+        ''')
+
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS zones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                display_id INTEGER NOT NULL,
+                zone_index INTEGER NOT NULL,
+                selected_media_id INTEGER NOT NULL DEFAULT 0,
+                cycle_interval INTEGER NOT NULL DEFAULT 10,
+                UNIQUE(display_id, zone_index),
+                FOREIGN KEY (display_id) REFERENCES displays(id)
+            )
+        ''')
+
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS zone_playlist_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                zone_id INTEGER NOT NULL,
+                media_id INTEGER NOT NULL,
+                duration INTEGER NOT NULL DEFAULT 10,
+                position INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (zone_id) REFERENCES zones(id)
             )
         ''')
 
@@ -223,7 +252,8 @@ def create_display(name, slug, width, height):
 
 def update_display(display_id, **kwargs):
     allowed = {'name', 'width', 'height', 'selected_media_id',
-               'cycle_interval', 'background_color', 'progress_indicator', 'video_fit', 'ambient_bg'}
+               'cycle_interval', 'background_color', 'progress_indicator', 'video_fit', 'ambient_bg',
+               'layout_preset'}
     fields = [(k, v) for k, v in kwargs.items() if k in allowed and v is not None]
     if not fields:
         return
@@ -236,6 +266,12 @@ def update_display(display_id, **kwargs):
 def delete_display(display_id):
     with get_db() as conn:
         conn.execute('DELETE FROM playlist_items WHERE display_id = ?', (display_id,))
+        zone_ids = [r['id'] for r in conn.execute(
+            'SELECT id FROM zones WHERE display_id = ?', (display_id,)
+        ).fetchall()]
+        for zone_id in zone_ids:
+            conn.execute('DELETE FROM zone_playlist_items WHERE zone_id = ?', (zone_id,))
+        conn.execute('DELETE FROM zones WHERE display_id = ?', (display_id,))
         conn.execute('DELETE FROM displays WHERE id = ?', (display_id,))
 
 
@@ -342,9 +378,14 @@ def delete_media(media_id):
 
         conn.execute('DELETE FROM pdf_renders WHERE media_id = ?', (media_id,))
         conn.execute('DELETE FROM playlist_items WHERE media_id = ?', (media_id,))
+        conn.execute('DELETE FROM zone_playlist_items WHERE media_id = ?', (media_id,))
         conn.execute('DELETE FROM media_items WHERE id = ?', (media_id,))
         conn.execute(
             'UPDATE displays SET selected_media_id = 0 WHERE selected_media_id = ?',
+            (media_id,)
+        )
+        conn.execute(
+            'UPDATE zones SET selected_media_id = 0 WHERE selected_media_id = ?',
             (media_id,)
         )
 
@@ -624,4 +665,110 @@ def reorder_gallery_images(media_id, ordered_ids):
             conn.execute(
                 'UPDATE gallery_images SET position = ? WHERE id = ? AND media_id = ?',
                 (i, image_id, media_id)
+            )
+
+
+# ---------- zones ----------
+
+def get_zones_for_display(display_id):
+    with get_db() as conn:
+        return conn.execute(
+            'SELECT * FROM zones WHERE display_id = ? ORDER BY zone_index',
+            (display_id,)
+        ).fetchall()
+
+
+def get_zone(zone_id):
+    with get_db() as conn:
+        return conn.execute('SELECT * FROM zones WHERE id = ?', (zone_id,)).fetchone()
+
+
+def get_zone_by_display_and_index(display_id, zone_index):
+    with get_db() as conn:
+        return conn.execute(
+            'SELECT * FROM zones WHERE display_id = ? AND zone_index = ?',
+            (display_id, zone_index)
+        ).fetchone()
+
+
+def create_zone(display_id, zone_index):
+    with get_db() as conn:
+        conn.execute(
+            'INSERT OR IGNORE INTO zones (display_id, zone_index) VALUES (?, ?)',
+            (display_id, zone_index)
+        )
+        return conn.execute(
+            'SELECT id FROM zones WHERE display_id = ? AND zone_index = ?',
+            (display_id, zone_index)
+        ).fetchone()['id']
+
+
+def delete_zone(zone_id):
+    with get_db() as conn:
+        conn.execute('DELETE FROM zone_playlist_items WHERE zone_id = ?', (zone_id,))
+        conn.execute('DELETE FROM zones WHERE id = ?', (zone_id,))
+
+
+def update_zone_settings(zone_id, selected_media_id, cycle_interval):
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE zones SET selected_media_id = ?, cycle_interval = ? WHERE id = ?',
+            (selected_media_id, cycle_interval, zone_id)
+        )
+
+
+def get_zone_playlist_items(zone_id):
+    with get_db() as conn:
+        return conn.execute(
+            '''SELECT zpi.id, zpi.zone_id, zpi.media_id, zpi.duration, zpi.position,
+                      m.content_type, m.original_name, m.filename, m.url, m.scale_to_fit
+               FROM zone_playlist_items zpi
+               JOIN media_items m ON zpi.media_id = m.id
+               WHERE zpi.zone_id = ?
+               ORDER BY zpi.position''',
+            (zone_id,)
+        ).fetchall()
+
+
+def add_zone_playlist_item(zone_id, media_id, duration):
+    with get_db() as conn:
+        max_pos = conn.execute(
+            'SELECT COALESCE(MAX(position), 0) FROM zone_playlist_items WHERE zone_id = ?',
+            (zone_id,)
+        ).fetchone()[0]
+        conn.execute(
+            'INSERT INTO zone_playlist_items (zone_id, media_id, duration, position) VALUES (?, ?, ?, ?)',
+            (zone_id, media_id, duration, max_pos + 1)
+        )
+        return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
+
+
+def remove_zone_playlist_item(item_id, zone_id):
+    with get_db() as conn:
+        conn.execute(
+            'DELETE FROM zone_playlist_items WHERE id = ? AND zone_id = ?',
+            (item_id, zone_id)
+        )
+        items = conn.execute(
+            'SELECT id FROM zone_playlist_items WHERE zone_id = ? ORDER BY position',
+            (zone_id,)
+        ).fetchall()
+        for i, row in enumerate(items, 1):
+            conn.execute('UPDATE zone_playlist_items SET position = ? WHERE id = ?', (i, row['id']))
+
+
+def update_zone_playlist_item_duration(item_id, zone_id, duration):
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE zone_playlist_items SET duration = ? WHERE id = ? AND zone_id = ?',
+            (duration, item_id, zone_id)
+        )
+
+
+def reorder_zone_playlist_items(zone_id, ordered_ids):
+    with get_db() as conn:
+        for i, item_id in enumerate(ordered_ids, 1):
+            conn.execute(
+                'UPDATE zone_playlist_items SET position = ? WHERE id = ? AND zone_id = ?',
+                (i, item_id, zone_id)
             )

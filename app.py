@@ -27,6 +27,10 @@ from models import (
     update_playlist_item_duration, move_playlist_item, reorder_playlist_items,
     add_gallery, get_gallery_images, add_gallery_image,
     remove_gallery_image, reorder_gallery_images,
+    get_zones_for_display, get_zone, get_zone_by_display_and_index,
+    create_zone, delete_zone, update_zone_settings,
+    get_zone_playlist_items, add_zone_playlist_item, remove_zone_playlist_item,
+    update_zone_playlist_item_duration, reorder_zone_playlist_items,
 )
 
 app = Flask(__name__)
@@ -35,6 +39,16 @@ app.config['UPLOAD_FOLDER'] = config.upload_folder
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB
 
 RENDERS_FOLDER = 'renders'
+
+LAYOUT_PRESETS = {
+    'fullscreen': {'zones': 1, 'label': 'Vollbild',                       'zone_labels': ['Vollbild']},
+    'split-h':    {'zones': 2, 'label': '2 Hälften (nebeneinander)',       'zone_labels': ['Links', 'Rechts']},
+    'split-v':    {'zones': 2, 'label': '2 Hälften (übereinander)',        'zone_labels': ['Oben', 'Unten']},
+    'sidebar-r':  {'zones': 2, 'label': 'Hauptbereich + Spalte (70/30)',   'zone_labels': ['Hauptbereich', 'Spalte']},
+    'sidebar-b':  {'zones': 2, 'label': 'Hauptbereich + Ticker (75/25)',   'zone_labels': ['Hauptbereich', 'Ticker']},
+    'thirds-h':   {'zones': 3, 'label': '3 Spalten',                       'zone_labels': ['Spalte 1', 'Spalte 2', 'Spalte 3']},
+    'quad':       {'zones': 4, 'label': '4 Felder (2×2)',                  'zone_labels': ['Oben links', 'Oben rechts', 'Unten links', 'Unten rechts']},
+}
 
 COOKIE_HIDE_CSS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookie_hide.conf')
 
@@ -260,7 +274,9 @@ def display_by_slug(slug):
     display = get_display_by_slug(slug)
     if not display:
         abort(404)
-    return render_template('display.html', slug=slug)
+    layout_preset = display['layout_preset'] if display['layout_preset'] else 'fullscreen'
+    zone_count = LAYOUT_PRESETS.get(layout_preset, {'zones': 1})['zones']
+    return render_template('display.html', slug=slug, layout_preset=layout_preset, zone_count=zone_count)
 
 
 def _media_to_item(media, display):
@@ -325,6 +341,56 @@ def display_api(slug):
     response = {
         **common,
         'cycle_interval': display['cycle_interval'],
+        'video_fit': display['video_fit'] or 'contain',
+        **_media_to_item(media, display),
+    }
+    return jsonify(response)
+
+
+@app.route('/api/display/<slug>/zone/<int:zone_index>/current')
+def zone_api(slug, zone_index):
+    """API endpoint: current content info for a specific zone of a display."""
+    display = get_display_by_slug(slug)
+    if not display:
+        return jsonify({'error': 'Display nicht gefunden'}), 404
+
+    zone = get_zone_by_display_and_index(display['id'], zone_index)
+
+    # Fallback: zone 0 with no zone record uses display-level settings (backward compat)
+    if not zone and zone_index == 0:
+        return display_api(slug)
+    if not zone:
+        return jsonify({'error': 'Zone nicht gefunden'}), 404
+
+    common = {
+        'background_color': display['background_color'],
+        'progress_indicator': display['progress_indicator'],
+        'ambient_bg': bool(display['ambient_bg']),
+    }
+
+    # Playlist mode
+    playlist = get_zone_playlist_items(zone['id'])
+    if playlist:
+        items = []
+        for pi in playlist:
+            media = get_media(pi['media_id'])
+            if not media:
+                continue
+            item = _media_to_item(media, display)
+            item['duration'] = pi['duration']
+            items.append(item)
+        if items:
+            return jsonify({**common, 'mode': 'playlist', 'items': items})
+
+    # Single item mode
+    selected_id = zone['selected_media_id']
+    media = get_newest_media() if selected_id == 0 else get_media(selected_id)
+    if not media:
+        return jsonify({'error': 'Kein Inhalt verfügbar'}), 404
+
+    response = {
+        **common,
+        'cycle_interval': zone['cycle_interval'],
         'video_fit': display['video_fit'] or 'contain',
         **_media_to_item(media, display),
     }
@@ -501,6 +567,12 @@ def admin():
         for d in displays
     }
 
+    display_zones = {d['id']: get_zones_for_display(d['id']) for d in displays}
+    zone_playlists = {}
+    for d in displays:
+        for zone in display_zones[d['id']]:
+            zone_playlists[zone['id']] = get_zone_playlist_items(zone['id'])
+
     return render_template(
         'admin.html',
         displays=displays,
@@ -518,6 +590,9 @@ def admin():
         gallery_images_map=gallery_images_map,
         gallery_image_counts=gallery_image_counts,
         pdf_page_counts=pdf_page_counts,
+        layout_presets=LAYOUT_PRESETS,
+        display_zones=display_zones,
+        zone_playlists=zone_playlists,
     )
 
 
@@ -1079,6 +1154,112 @@ def manual_cleanup():
     else:
         flash('Keine alten Dateien zum Löschen gefunden', 'info')
     return redirect(url_for('admin'))
+
+
+# --- Zone management ---
+
+@app.route('/admin/display/<int:display_id>/layout', methods=['POST'])
+@login_required
+def update_display_layout(display_id):
+    display = get_display(display_id)
+    if not display:
+        flash('Display nicht gefunden', 'error')
+        return redirect(url_for('admin'))
+
+    preset = request.form.get('layout_preset', 'fullscreen')
+    if preset not in LAYOUT_PRESETS:
+        flash('Ungültiges Layout', 'error')
+        return redirect(url_for('admin'))
+
+    zone_count = LAYOUT_PRESETS[preset]['zones']
+    existing_zones = get_zones_for_display(display_id)
+    existing_by_index = {z['zone_index']: z['id'] for z in existing_zones}
+
+    # Create missing zones
+    for i in range(zone_count):
+        if i not in existing_by_index:
+            create_zone(display_id, i)
+
+    # Delete extra zones
+    for idx, zone_id in existing_by_index.items():
+        if idx >= zone_count:
+            delete_zone(zone_id)
+
+    update_display(display_id, layout_preset=preset)
+    flash(f'Layout: {LAYOUT_PRESETS[preset]["label"]}', 'success')
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/zone/<int:zone_id>/settings', methods=['POST'])
+@login_required
+def update_zone_settings_route(zone_id):
+    zone = get_zone(zone_id)
+    if not zone:
+        flash('Zone nicht gefunden', 'error')
+        return redirect(url_for('admin'))
+    selected_media_id = request.form.get('selected_media_id', 0, type=int)
+    cycle_interval = max(1, request.form.get('cycle_interval', 10, type=int))
+    update_zone_settings(zone_id, selected_media_id, cycle_interval)
+    flash('Zone-Einstellungen gespeichert', 'success')
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/zone/<int:zone_id>/playlist/add', methods=['POST'])
+@login_required
+def zone_playlist_add(zone_id):
+    zone = get_zone(zone_id)
+    if not zone:
+        flash('Zone nicht gefunden', 'error')
+        return redirect(url_for('admin'))
+    media_id = request.form.get('media_id', type=int)
+    duration = max(1, request.form.get('duration', 10, type=int))
+    media = get_media(media_id) if media_id else None
+    if not media:
+        flash('Inhalt nicht gefunden', 'error')
+        return redirect(url_for('admin'))
+    new_id = add_zone_playlist_item(zone_id, media_id, duration)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({
+            'ok': True, 'id': new_id,
+            'original_name': media['original_name'],
+            'content_type': media['content_type'],
+            'duration': duration,
+        })
+    flash('Inhalt zur Zone-Playlist hinzugefügt', 'success')
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/zone/<int:zone_id>/playlist/item/<int:item_id>/remove', methods=['POST'])
+@login_required
+def zone_playlist_remove(zone_id, item_id):
+    remove_zone_playlist_item(item_id, zone_id)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True})
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/zone/<int:zone_id>/playlist/item/<int:item_id>/duration', methods=['POST'])
+@login_required
+def zone_playlist_update_dur(zone_id, item_id):
+    duration = request.form.get('duration', type=int)
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    if not duration or duration < 1:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Ungültige Dauer'}), 400
+        flash('Ungültige Dauer', 'error')
+        return redirect(url_for('admin'))
+    update_zone_playlist_item_duration(item_id, zone_id, duration)
+    if is_ajax:
+        return jsonify({'ok': True})
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/zone/<int:zone_id>/playlist/reorder', methods=['POST'])
+@login_required
+def zone_playlist_reorder(zone_id):
+    ordered_ids = request.json.get('order', [])
+    reorder_zone_playlist_items(zone_id, ordered_ids)
+    return jsonify({'ok': True})
 
 
 if __name__ == '__main__':
