@@ -555,10 +555,15 @@ def admin():
     }
     gallery_image_counts = {mid: len(imgs) for mid, imgs in gallery_images_map.items()}
 
-    display_thumbnails = {
-        d['id']: get_thumbnail_url(display_current.get(d['id']), d['id'], gallery_images_map)
-        for d in displays
-    }
+    display_thumbnails = {}
+    for d in displays:
+        playlist = display_playlists[d['id']]
+        if playlist:
+            first_media = get_media(playlist[0]['media_id'])
+            thumb = get_thumbnail_url(first_media, d['id'], gallery_images_map)
+        else:
+            thumb = get_thumbnail_url(display_current.get(d['id']), d['id'], gallery_images_map)
+        display_thumbnails[d['id']] = thumb
 
     display_zones = {d['id']: get_zones_for_display(d['id']) for d in displays}
     zone_playlists = {}
