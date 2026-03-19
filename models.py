@@ -88,6 +88,28 @@ def init_db():
         ''')
 
         conn.execute('''
+            CREATE TABLE IF NOT EXISTS pdf_spread_renders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                media_id INTEGER NOT NULL,
+                display_id INTEGER NOT NULL,
+                spread_type TEXT NOT NULL,
+                page_number INTEGER NOT NULL,
+                render_filename TEXT NOT NULL,
+                UNIQUE(media_id, display_id, spread_type, page_number)
+            )
+        ''')
+
+        # Migrate: add spread_mode to playlist tables if upgrading
+        try:
+            conn.execute("ALTER TABLE playlist_items ADD COLUMN spread_mode TEXT NOT NULL DEFAULT 'none'")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE zone_playlist_items ADD COLUMN spread_mode TEXT NOT NULL DEFAULT 'none'")
+        except Exception:
+            pass
+
+        conn.execute('''
             CREATE TABLE IF NOT EXISTS gallery_images (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 media_id INTEGER NOT NULL,
@@ -369,6 +391,11 @@ def delete_media(media_id):
             (media_id,)
         ).fetchall()
 
+        spread_renders = conn.execute(
+            'SELECT display_id, render_filename FROM pdf_spread_renders WHERE media_id = ?',
+            (media_id,)
+        ).fetchall()
+
         gallery_images = []
         if item['content_type'] == 'gallery':
             gallery_images = conn.execute(
@@ -377,6 +404,7 @@ def delete_media(media_id):
             conn.execute('DELETE FROM gallery_images WHERE media_id = ?', (media_id,))
 
         conn.execute('DELETE FROM pdf_renders WHERE media_id = ?', (media_id,))
+        conn.execute('DELETE FROM pdf_spread_renders WHERE media_id = ?', (media_id,))
         conn.execute('DELETE FROM playlist_items WHERE media_id = ?', (media_id,))
         conn.execute('DELETE FROM zone_playlist_items WHERE media_id = ?', (media_id,))
         conn.execute('DELETE FROM media_items WHERE id = ?', (media_id,))
@@ -391,7 +419,10 @@ def delete_media(media_id):
 
         return {
             'filename': item['filename'],
-            'renders': [(r['display_id'], r['render_filename']) for r in renders],
+            'renders': (
+                [(r['display_id'], r['render_filename']) for r in renders] +
+                [(r['display_id'], r['render_filename']) for r in spread_renders]
+            ),
             'gallery_images': [r['filename'] for r in gallery_images],
         }
 
@@ -459,6 +490,53 @@ def delete_pdf_renders_for_display(display_id):
         ).fetchall()
         conn.execute('DELETE FROM pdf_renders WHERE display_id = ?', (display_id,))
         return [r['render_filename'] for r in renders]
+
+
+# ---------- pdf spread renders ----------
+
+def add_pdf_spread_render(media_id, display_id, spread_type, page_number, render_filename):
+    with get_db() as conn:
+        conn.execute(
+            '''INSERT OR REPLACE INTO pdf_spread_renders
+               (media_id, display_id, spread_type, page_number, render_filename)
+               VALUES (?, ?, ?, ?, ?)''',
+            (media_id, display_id, spread_type, page_number, render_filename)
+        )
+
+
+def get_pdf_spread_renders(media_id, display_id, spread_type):
+    with get_db() as conn:
+        return conn.execute(
+            '''SELECT * FROM pdf_spread_renders
+               WHERE media_id = ? AND display_id = ? AND spread_type = ?
+               ORDER BY page_number''',
+            (media_id, display_id, spread_type)
+        ).fetchall()
+
+
+def delete_pdf_spread_renders(media_id, display_id):
+    """Delete spread renders for a media+display pair. Returns list of filenames."""
+    with get_db() as conn:
+        rows = conn.execute(
+            'SELECT render_filename FROM pdf_spread_renders WHERE media_id = ? AND display_id = ?',
+            (media_id, display_id)
+        ).fetchall()
+        conn.execute(
+            'DELETE FROM pdf_spread_renders WHERE media_id = ? AND display_id = ?',
+            (media_id, display_id)
+        )
+        return [r['render_filename'] for r in rows]
+
+
+def delete_pdf_spread_renders_for_display(display_id):
+    """Delete all spread renders for a display. Returns list of filenames."""
+    with get_db() as conn:
+        rows = conn.execute(
+            'SELECT render_filename FROM pdf_spread_renders WHERE display_id = ?',
+            (display_id,)
+        ).fetchall()
+        conn.execute('DELETE FROM pdf_spread_renders WHERE display_id = ?', (display_id,))
+        return [r['render_filename'] for r in rows]
 
 
 # ---------- cleanup ----------
@@ -538,7 +616,7 @@ def get_playlist_items(display_id):
     """Return ordered playlist items joined with media info."""
     with get_db() as conn:
         return conn.execute(
-            '''SELECT pi.id, pi.display_id, pi.media_id, pi.duration, pi.position,
+            '''SELECT pi.id, pi.display_id, pi.media_id, pi.duration, pi.position, pi.spread_mode,
                       m.content_type, m.original_name, m.filename, m.url, m.scale_to_fit
                FROM playlist_items pi
                JOIN media_items m ON pi.media_id = m.id
@@ -581,6 +659,14 @@ def update_playlist_item_duration(item_id, display_id, duration):
         conn.execute(
             'UPDATE playlist_items SET duration = ? WHERE id = ? AND display_id = ?',
             (duration, item_id, display_id)
+        )
+
+
+def update_playlist_item_spread_mode(item_id, display_id, spread_mode):
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE playlist_items SET spread_mode = ? WHERE id = ? AND display_id = ?',
+            (spread_mode, item_id, display_id)
         )
 
 
@@ -729,7 +815,7 @@ def update_zone_settings(zone_id, selected_media_id, cycle_interval):
 def get_zone_playlist_items(zone_id):
     with get_db() as conn:
         return conn.execute(
-            '''SELECT zpi.id, zpi.zone_id, zpi.media_id, zpi.duration, zpi.position,
+            '''SELECT zpi.id, zpi.zone_id, zpi.media_id, zpi.duration, zpi.position, zpi.spread_mode,
                       m.content_type, m.original_name, m.filename, m.url, m.scale_to_fit
                FROM zone_playlist_items zpi
                JOIN media_items m ON zpi.media_id = m.id
@@ -771,6 +857,14 @@ def update_zone_playlist_item_duration(item_id, zone_id, duration):
         conn.execute(
             'UPDATE zone_playlist_items SET duration = ? WHERE id = ? AND zone_id = ?',
             (duration, item_id, zone_id)
+        )
+
+
+def update_zone_playlist_item_spread_mode(item_id, zone_id, spread_mode):
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE zone_playlist_items SET spread_mode = ? WHERE id = ? AND zone_id = ?',
+            (spread_mode, item_id, zone_id)
         )
 
 

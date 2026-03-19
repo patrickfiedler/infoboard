@@ -11,6 +11,8 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.utils import secure_filename
 import bcrypt
 
+from PIL import Image as PilImage
+
 from config import config
 from models import (
     init_db,
@@ -21,6 +23,9 @@ from models import (
     get_media_count, get_newest_media, update_media_name, delete_media,
     add_pdf_render, get_pdf_renders, get_pdf_page_count, get_all_pdf_page_counts, delete_pdf_renders,
     delete_pdf_renders_for_display,
+    add_pdf_spread_render, get_pdf_spread_renders,
+    delete_pdf_spread_renders, delete_pdf_spread_renders_for_display,
+    update_playlist_item_spread_mode, update_zone_playlist_item_spread_mode,
     cleanup_old_media,
     get_url_media_by_url,
     update_media_url,
@@ -196,7 +201,63 @@ def render_pdf_for_display(filepath, media_id, display):
     for i, page_path in enumerate(pages, 1):
         add_pdf_render(media_id, display_id, i, os.path.basename(page_path))
 
+    _render_pdf_spreads(pages, media_id, display_id, render_dir)
     return len(pages)
+
+
+def _stitch_spread(left_path, right_path, output_path):
+    """Stitch two page images side-by-side. right_path may be None (lone page on left)."""
+    left = PilImage.open(left_path).convert('RGB')
+    w, h = left.size
+    canvas = PilImage.new('RGB', (w * 2, h), (255, 255, 255))
+    canvas.paste(left, (0, 0))
+    if right_path:
+        right = PilImage.open(right_path).convert('RGB')
+        canvas.paste(right, (w, 0))
+    canvas.save(output_path, 'PNG')
+
+
+def _render_pdf_spreads(pages, media_id, display_id, render_dir):
+    """Generate paired and book spread renders from single-page render paths."""
+    # Delete stale spread renders for this media+display
+    old = delete_pdf_spread_renders(media_id, display_id)
+    for fname in old:
+        p = os.path.join(render_dir, fname)
+        if os.path.exists(p):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+    n = len(pages)
+    if n == 0:
+        return
+
+    # Spread type 'paired': (1+2), (3+4), ...
+    prefix_p = str(uuid.uuid4())
+    spread_num = 1
+    i = 0
+    while i < n:
+        out = os.path.join(render_dir, f'{prefix_p}-{spread_num}.png')
+        _stitch_spread(pages[i], pages[i + 1] if i + 1 < n else None, out)
+        add_pdf_spread_render(media_id, display_id, 'paired', spread_num, os.path.basename(out))
+        spread_num += 1
+        i += 2
+
+    # Spread type 'book': (1), (2+3), (4+5), ...
+    prefix_b = str(uuid.uuid4())
+    spread_num = 1
+    out = os.path.join(render_dir, f'{prefix_b}-{spread_num}.png')
+    _stitch_spread(pages[0], None, out)
+    add_pdf_spread_render(media_id, display_id, 'book', spread_num, os.path.basename(out))
+    spread_num += 1
+    i = 1
+    while i < n:
+        out = os.path.join(render_dir, f'{prefix_b}-{spread_num}.png')
+        _stitch_spread(pages[i], pages[i + 1] if i + 1 < n else None, out)
+        add_pdf_spread_render(media_id, display_id, 'book', spread_num, os.path.basename(out))
+        spread_num += 1
+        i += 2
 
 
 def render_pdf_for_all_displays(filepath, media_id):
@@ -314,11 +375,16 @@ def display_by_slug(slug):
     return render_template('display.html', slug=slug, layout_preset=layout_preset, zone_count=zone_count)
 
 
-def _media_to_item(media, display):
+def _media_to_item(media, display, spread_mode='none'):
     """Serialize a media item for the display API (used in both single and playlist mode)."""
     item = {'content_type': media['content_type'], 'original_name': media['original_name']}
     if media['content_type'] == 'pdf':
-        renders = get_pdf_renders(media['id'], display['id'])
+        if spread_mode in ('paired', 'book'):
+            renders = get_pdf_spread_renders(media['id'], display['id'], spread_mode)
+            if not renders:  # fall back to single pages if spreads not yet generated
+                renders = get_pdf_renders(media['id'], display['id'])
+        else:
+            renders = get_pdf_renders(media['id'], display['id'])
         item['pages'] = [
             url_for('serve_render', display_id=display['id'], filename=r['render_filename'])
             for r in renders
@@ -361,7 +427,7 @@ def display_api(slug):
             media = get_media(pi['media_id'])
             if not media:
                 continue
-            item = _media_to_item(media, display)
+            item = _media_to_item(media, display, pi['spread_mode'])
             item['duration'] = pi['duration']
             items.append(item)
         if items:
@@ -411,7 +477,7 @@ def zone_api(slug, zone_index):
             media = get_media(pi['media_id'])
             if not media:
                 continue
-            item = _media_to_item(media, display)
+            item = _media_to_item(media, display, pi['spread_mode'])
             item['duration'] = pi['duration']
             items.append(item)
         if items:
@@ -759,8 +825,11 @@ def delete_display_route(display_id):
         flash('Das letzte Display kann nicht gelöscht werden', 'error')
         return redirect(url_for('admin'))
 
-    # Clean up render files
-    render_filenames = delete_pdf_renders_for_display(display_id)
+    # Clean up render files (single pages + spreads)
+    render_filenames = (
+        delete_pdf_renders_for_display(display_id) +
+        delete_pdf_spread_renders_for_display(display_id)
+    )
     render_dir = os.path.join(RENDERS_FOLDER, str(display_id))
     for fname in render_filenames:
         path = os.path.join(render_dir, fname)
@@ -829,6 +898,16 @@ def playlist_update_dur(display_id, item_id):
     if is_ajax:
         return jsonify({'ok': True})
     return redirect(url_for('admin'))
+
+
+@app.route('/admin/display/<int:display_id>/playlist/item/<int:item_id>/spread', methods=['POST'])
+@login_required
+def playlist_update_spread(display_id, item_id):
+    spread_mode = request.form.get('spread_mode', 'none')
+    if spread_mode not in ('none', 'paired', 'book'):
+        return jsonify({'ok': False}), 400
+    update_playlist_item_spread_mode(item_id, display_id, spread_mode)
+    return jsonify({'ok': True})
 
 
 @app.route('/admin/display/<int:display_id>/playlist/reorder', methods=['POST'])
@@ -1235,6 +1314,16 @@ def zone_playlist_update_dur(zone_id, item_id):
     if is_ajax:
         return jsonify({'ok': True})
     return redirect(url_for('admin'))
+
+
+@app.route('/admin/zone/<int:zone_id>/playlist/item/<int:item_id>/spread', methods=['POST'])
+@login_required
+def zone_playlist_update_spread(zone_id, item_id):
+    spread_mode = request.form.get('spread_mode', 'none')
+    if spread_mode not in ('none', 'paired', 'book'):
+        return jsonify({'ok': False}), 400
+    update_zone_playlist_item_spread_mode(item_id, zone_id, spread_mode)
+    return jsonify({'ok': True})
 
 
 @app.route('/admin/zone/<int:zone_id>/playlist/reorder', methods=['POST'])

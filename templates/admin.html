@@ -427,6 +427,12 @@
                                         {% if page_count > 1 %}
                                         <span style="font-size:11px;color:#aaa;display:block;">{{ page_count }} Seiten · ~{{ (pi.duration // page_count) }}s/Seite</span>
                                         {% endif %}
+                                        <select class="spread-select" data-display="{{ d.id }}" data-item="{{ pi.id }}"
+                                                style="font-size:11px;margin-top:4px;width:auto;">
+                                            <option value="none"   {% if pi.spread_mode == 'none'   %}selected{% endif %}>Einzelseiten</option>
+                                            <option value="paired" {% if pi.spread_mode == 'paired' %}selected{% endif %}>Doppelseiten (1+2, 3+4…)</option>
+                                            <option value="book"   {% if pi.spread_mode == 'book'   %}selected{% endif %}>Buchansicht (1, 2+3…)</option>
+                                        </select>
                                     {% elif pi.content_type == 'gallery' %}
                                         {% set img_count = gallery_image_counts.get(pi.media_id, 0) %}
                                         {% if img_count > 0 %}
@@ -497,6 +503,12 @@
                                         {% if page_count > 1 %}
                                         <span style="font-size:11px;color:#aaa;display:block;">{{ page_count }} Seiten · ~{{ (pi.duration // page_count) }}s/Seite</span>
                                         {% endif %}
+                                        <select class="zone-spread-select" data-zone="{{ zone.id }}" data-item="{{ pi.id }}"
+                                                style="font-size:11px;margin-top:4px;width:auto;">
+                                            <option value="none"   {% if pi.spread_mode == 'none'   %}selected{% endif %}>Einzelseiten</option>
+                                            <option value="paired" {% if pi.spread_mode == 'paired' %}selected{% endif %}>Doppelseiten (1+2, 3+4…)</option>
+                                            <option value="book"   {% if pi.spread_mode == 'book'   %}selected{% endif %}>Buchansicht (1, 2+3…)</option>
+                                        </select>
                                     {% elif pi.content_type == 'gallery' %}
                                         {% set img_count = gallery_image_counts.get(pi.media_id, 0) %}
                                         {% if img_count > 0 %}
@@ -914,6 +926,30 @@
                 e.target.style.borderColor = '';
                 saved.style.opacity = '0';
             }, 1500);
+        });
+    });
+
+    // Spread mode auto-save (display playlists)
+    document.addEventListener('change', function(e) {
+        if (!e.target.classList.contains('spread-select')) return;
+        var displayId = e.target.dataset.display;
+        var itemId    = e.target.dataset.item;
+        fetch('/admin/display/' + displayId + '/playlist/item/' + itemId + '/spread', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+            body: 'spread_mode=' + encodeURIComponent(e.target.value)
+        });
+    });
+
+    // Spread mode auto-save (zone playlists)
+    document.addEventListener('change', function(e) {
+        if (!e.target.classList.contains('zone-spread-select')) return;
+        var zoneId = e.target.dataset.zone;
+        var itemId = e.target.dataset.item;
+        fetch('/admin/zone/' + zoneId + '/playlist/item/' + itemId + '/spread', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+            body: 'spread_mode=' + encodeURIComponent(e.target.value)
         });
     });
 
