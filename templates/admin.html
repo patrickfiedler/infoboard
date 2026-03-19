@@ -224,21 +224,23 @@
         .tab-btn:hover { color: #333; background: none; }
         .tab-btn.active { color: #667eea; border-bottom-color: #667eea; }
 
-        /* Display preview thumbnail */
-        .display-preview-thumb {
-            width: 120px;
-            height: 68px;
-            object-fit: cover;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            flex-shrink: 0;
-        }
-        .display-preview-placeholder {
-            width: 120px; height: 68px;
+        /* Display preview */
+        .display-preview {
+            position: relative; width: 120px; height: 68px;
             border: 1px solid #ddd; border-radius: 4px;
-            background: #f8f9fa;
+            overflow: hidden; flex-shrink: 0; background: #e9ecef;
+        }
+        .display-preview .pz {
+            position: absolute; overflow: hidden;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45);
+        }
+        .display-preview .pz img {
+            width: 100%; height: 100%; object-fit: cover; display: block;
+        }
+        .display-preview .pz-empty {
+            width: 100%; height: 100%; background: #dde0e5;
             display: flex; align-items: center; justify-content: center;
-            color: #ccc; font-size: 20px; flex-shrink: 0;
+            color: #bbb; font-size: 10px;
         }
     </style>
 </head>
@@ -292,17 +294,28 @@
                         </form>
                         {% endif %}
                     </div>
-                    {% set thumb = display_thumbnails.get(d.id) %}
-                    {% if thumb %}
-                        <img src="{{ thumb }}" class="display-preview-thumb" alt="Vorschau">
-                    {% else %}
-                        {% set cur = display_current.get(d.id) %}
-                        <div class="display-preview-placeholder">
-                            {% if cur and cur['content_type'] == 'url' %}🌐
-                            {% elif cur and cur['content_type'] == 'video' %}▶
-                            {% else %}—{% endif %}
-                        </div>
-                    {% endif %}
+                    {% set preset_info = layout_presets.get(d.layout_preset or 'fullscreen', layout_presets['fullscreen']) %}
+                    {% set d_zones = display_zones.get(d.id, []) %}
+                    <div class="display-preview">
+                        {% for geo in preset_info.preview %}
+                            {% set zi = loop.index0 %}
+                            {% set zone_obj = d_zones | selectattr('zone_index', 'equalto', zi) | first | default(none) %}
+                            {% if zone_obj %}
+                                {% set thumb = zone_thumbnails.get(zone_obj.id) %}
+                            {% elif zi == 0 %}
+                                {% set thumb = display_thumbnails.get(d.id) %}
+                            {% else %}
+                                {% set thumb = none %}
+                            {% endif %}
+                            <div class="pz" style="top:{{ geo.top }};left:{{ geo.left }};width:{{ geo.width }};height:{{ geo.height }};">
+                                {% if thumb %}
+                                    <img src="{{ thumb }}" alt="">
+                                {% else %}
+                                    <div class="pz-empty">—</div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
                 </div>
 
                 {% set pl = display_playlists.get(d.id, []) %}

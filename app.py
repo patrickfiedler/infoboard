@@ -40,14 +40,31 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB
 
 RENDERS_FOLDER = 'renders'
 
+def _p(t, l, w, h):
+    return {'top': t, 'left': l, 'width': w, 'height': h}
+
 LAYOUT_PRESETS = {
-    'fullscreen': {'zones': 1, 'label': 'Vollbild',                       'zone_labels': ['Vollbild']},
-    'split-h':    {'zones': 2, 'label': '2 Hälften (nebeneinander)',       'zone_labels': ['Links', 'Rechts']},
-    'split-v':    {'zones': 2, 'label': '2 Hälften (übereinander)',        'zone_labels': ['Oben', 'Unten']},
-    'sidebar-r':  {'zones': 2, 'label': 'Hauptbereich + Spalte (70/30)',   'zone_labels': ['Hauptbereich', 'Spalte']},
-    'sidebar-b':  {'zones': 2, 'label': 'Hauptbereich + Ticker (75/25)',   'zone_labels': ['Hauptbereich', 'Ticker']},
-    'thirds-h':   {'zones': 3, 'label': '3 Spalten',                       'zone_labels': ['Spalte 1', 'Spalte 2', 'Spalte 3']},
-    'quad':       {'zones': 4, 'label': '4 Felder (2×2)',                  'zone_labels': ['Oben links', 'Oben rechts', 'Unten links', 'Unten rechts']},
+    'fullscreen': {'zones': 1, 'label': 'Vollbild',
+                   'zone_labels': ['Vollbild'],
+                   'preview': [_p('0%','0%','100%','100%')]},
+    'split-h':    {'zones': 2, 'label': '2 Hälften (nebeneinander)',
+                   'zone_labels': ['Links', 'Rechts'],
+                   'preview': [_p('0%','0%','50%','100%'), _p('0%','50%','50%','100%')]},
+    'split-v':    {'zones': 2, 'label': '2 Hälften (übereinander)',
+                   'zone_labels': ['Oben', 'Unten'],
+                   'preview': [_p('0%','0%','100%','50%'), _p('50%','0%','100%','50%')]},
+    'sidebar-r':  {'zones': 2, 'label': 'Hauptbereich + Spalte (70/30)',
+                   'zone_labels': ['Hauptbereich', 'Spalte'],
+                   'preview': [_p('0%','0%','70%','100%'), _p('0%','70%','30%','100%')]},
+    'sidebar-b':  {'zones': 2, 'label': 'Hauptbereich + Ticker (75/25)',
+                   'zone_labels': ['Hauptbereich', 'Ticker'],
+                   'preview': [_p('0%','0%','100%','75%'), _p('75%','0%','100%','25%')]},
+    'thirds-h':   {'zones': 3, 'label': '3 Spalten',
+                   'zone_labels': ['Spalte 1', 'Spalte 2', 'Spalte 3'],
+                   'preview': [_p('0%','0%','33.33%','100%'), _p('0%','33.33%','33.33%','100%'), _p('0%','66.66%','33.34%','100%')]},
+    'quad':       {'zones': 4, 'label': '4 Felder (2×2)',
+                   'zone_labels': ['Oben links', 'Oben rechts', 'Unten links', 'Unten rechts'],
+                   'preview': [_p('0%','0%','50%','50%'), _p('0%','50%','50%','50%'), _p('50%','0%','50%','50%'), _p('50%','50%','50%','50%')]},
 }
 
 COOKIE_HIDE_CSS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookie_hide.conf')
@@ -571,6 +588,16 @@ def admin():
         for zone in display_zones[d['id']]:
             zone_playlists[zone['id']] = get_zone_playlist_items(zone['id'])
 
+    zone_thumbnails = {}
+    for d in displays:
+        for zone in display_zones[d['id']]:
+            zpl = zone_playlists.get(zone['id'], [])
+            if zpl:
+                first_media = get_media(zpl[0]['media_id'])
+                zone_thumbnails[zone['id']] = get_thumbnail_url(first_media, d['id'], gallery_images_map)
+            else:
+                zone_thumbnails[zone['id']] = None
+
     return render_template(
         'admin.html',
         displays=displays,
@@ -590,6 +617,7 @@ def admin():
         layout_presets=LAYOUT_PRESETS,
         display_zones=display_zones,
         zone_playlists=zone_playlists,
+        zone_thumbnails=zone_thumbnails,
     )
 
 
