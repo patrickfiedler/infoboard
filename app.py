@@ -3,6 +3,7 @@ import re
 import uuid
 import glob as glob_module
 import subprocess
+import threading
 import requests as http_requests
 from urllib.parse import urlparse, parse_qs
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, abort, Response
@@ -125,6 +126,23 @@ def verify_password(password):
 
 
 # ---------- PDF rendering ----------
+
+# In-memory render job state: {media_id: {'status': 'rendering'|'done'|'error',
+#                                          'done': int, 'total': int, 'errors': []}}
+render_jobs = {}
+
+
+def _render_pdf_background(filepath, media_id, displays, upload_folder):
+    render_jobs[media_id] = {'status': 'rendering', 'done': 0, 'total': len(displays), 'errors': []}
+    for display in displays:
+        try:
+            render_pdf_for_display(filepath, media_id, display)
+        except RuntimeError as e:
+            render_jobs[media_id]['errors'].append(f'{display["name"]}: {e}')
+        render_jobs[media_id]['done'] += 1
+    render_jobs[media_id]['status'] = 'done'
+    cleanup_old_media(upload_folder)
+
 
 def _dpi_for_display(width, height):
     """Calculate a suitable render DPI for a given display resolution."""
@@ -421,6 +439,13 @@ def current_pdf_legacy():
     if not displays:
         return jsonify({'error': 'Keine Anzeige konfiguriert'}), 404
     return display_api(displays[0]['slug'])
+
+
+@app.route('/api/render-jobs')
+@login_required
+def api_render_jobs():
+    """Return all active/recent render jobs so the admin UI can show progress."""
+    return jsonify(render_jobs)
 
 
 @app.route('/uploads/<filename>')
@@ -944,23 +969,15 @@ def upload_file():
 
     media_id = add_media(content_type, original_name, filename=unique_filename, file_size=file_size)
 
-    # For PDFs: pre-render for all displays
+    # For PDFs: render in background so the upload response is immediate
     if content_type == 'pdf':
-        errors = []
-        for display in get_all_displays():
-            try:
-                render_pdf_for_display(filepath, media_id, display)
-            except RuntimeError as e:
-                errors.append(f'{display["name"]}: {e}')
-
-        deleted_count = cleanup_old_media(app.config['UPLOAD_FOLDER'])
-        msg = f'"{original_name}" erfolgreich hochgeladen'
-        if errors:
-            flash(msg + '. Render-Fehler: ' + '; '.join(errors), 'error')
-        elif deleted_count > 0:
-            flash(f'{msg}. {deleted_count} alte Datei(en) automatisch gelöscht.', 'success')
-        else:
-            flash(msg, 'success')
+        displays = get_all_displays()
+        threading.Thread(
+            target=_render_pdf_background,
+            args=(filepath, media_id, displays, app.config['UPLOAD_FOLDER']),
+            daemon=True,
+        ).start()
+        flash(f'"{original_name}" hochgeladen — wird gerendert…', 'success')
     else:
         deleted_count = cleanup_old_media(app.config['UPLOAD_FOLDER'])
         msg = f'"{original_name}" erfolgreich hochgeladen'

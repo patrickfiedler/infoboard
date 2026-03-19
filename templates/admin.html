@@ -642,9 +642,12 @@
                 </thead>
                 <tbody>
                 {% for item in media_list %}
-                    <tr>
+                    <tr data-media-id="{{ item.id }}">
                         <td>
                             <span class="original-name" onclick="toggleRename({{ item.id }})">{{ item.original_name }}</span>
+                            {% if item.content_type == 'pdf' %}
+                            <span class="render-status" data-media-id="{{ item.id }}" style="display:none;font-size:11px;color:#888;margin-left:6px;">⏳ wird gerendert…</span>
+                            {% endif %}
                             <form method="POST" action="{{ url_for('rename_media', media_id=item.id) }}"
                                   class="rename-form" id="rename-{{ item.id }}">
                                 <input type="text" name="new_name" value="{{ item.original_name }}" required>
@@ -1191,6 +1194,43 @@
             });
         });
     });
+</script>
+<script>
+(function() {
+    var timer = null;
+
+    function pollRenderJobs() {
+        fetch('{{ url_for("api_render_jobs") }}')
+            .then(function(r) { return r.json(); })
+            .then(function(jobs) {
+                var anyActive = false;
+                Object.keys(jobs).forEach(function(mediaId) {
+                    var job = jobs[mediaId];
+                    var el = document.querySelector('.render-status[data-media-id="' + mediaId + '"]');
+                    if (!el) return;
+                    if (job.status === 'rendering') {
+                        anyActive = true;
+                        el.style.display = 'inline';
+                        el.textContent = '⏳ wird gerendert (' + job.done + '/' + job.total + ')…';
+                    } else {
+                        el.style.display = 'none';
+                    }
+                });
+                if (anyActive) {
+                    timer = setTimeout(pollRenderJobs, 2000);
+                } else if (timer !== null) {
+                    // Was active before, now done — reload to show updated page counts etc.
+                    window.location.reload();
+                }
+            })
+            .catch(function() { /* ignore network errors */ });
+    }
+
+    // Start polling only if there are any PDF render-status elements on this page
+    if (document.querySelector('.render-status')) {
+        pollRenderJobs();
+    }
+})();
 </script>
 </body>
 </html>
