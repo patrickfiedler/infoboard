@@ -253,6 +253,11 @@
         <a href="{{ url_for('logout') }}" class="logout-btn">Abmelden</a>
     </header>
 
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="displays" onclick="switchTab('displays', this)">Displays</button>
+        <button class="tab-btn" data-tab="content" onclick="switchTab('content', this)">Inhalte</button>
+    </div>
+
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}
@@ -260,11 +265,6 @@
             {% endfor %}
         {% endif %}
     {% endwith %}
-
-    <div class="tab-bar">
-        <button class="tab-btn active" data-tab="displays" onclick="switchTab('displays', this)">Displays</button>
-        <button class="tab-btn" data-tab="content" onclick="switchTab('content', this)">Inhalte</button>
-    </div>
 
     <div id="tab-displays">
     <!-- ===== DISPLAYS ===== -->
