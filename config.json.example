@@ -4,5 +4,6 @@
   "secret_key": "change-this-to-a-random-secret-key",
   "port": 8080,
   "host": "0.0.0.0",
-  "upload_folder": "uploads"
+  "upload_folder": "uploads",
+  "render_workers": null
 }

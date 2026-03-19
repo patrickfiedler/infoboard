@@ -54,6 +54,11 @@ class Config:
         """Get upload folder path."""
         return self.config.get('upload_folder', 'uploads')
 
+    @property
+    def render_workers(self):
+        """Max parallel workers for PDF rendering. Defaults to all CPU cores."""
+        return self.config.get('render_workers', None)
+
 
 # Global config instance
 config = Config()

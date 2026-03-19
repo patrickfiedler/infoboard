@@ -158,7 +158,7 @@ def _dpi_for_display(width, height):
     return max(100, min(300, dpi))
 
 
-_CPU_WORKERS = max(1, os.cpu_count() or 1)
+_CPU_WORKERS = max(1, config.render_workers or os.cpu_count() or 1)
 
 
 def _pdf_page_count(filepath):
