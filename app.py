@@ -19,7 +19,7 @@ from models import (
     create_display, update_display, delete_display,
     add_media, get_media, get_all_media, get_all_pdf_media,
     get_media_count, get_newest_media, update_media_name, delete_media,
-    add_pdf_render, get_pdf_renders, get_pdf_page_count, delete_pdf_renders,
+    add_pdf_render, get_pdf_renders, get_pdf_page_count, get_all_pdf_page_counts, delete_pdf_renders,
     delete_pdf_renders_for_display,
     cleanup_old_media,
     get_url_media_by_url,
@@ -582,6 +582,8 @@ def admin():
         if item['content_type'] == 'youtube' and item['url']
     }
 
+    pdf_media_page_counts = get_all_pdf_page_counts()  # {media_id: page_count} for media library
+
     pdf_page_counts = {}
     for d in displays:
         pdf_page_counts[d['id']] = {
@@ -639,6 +641,7 @@ def admin():
         gallery_images_map=gallery_images_map,
         gallery_image_counts=gallery_image_counts,
         pdf_page_counts=pdf_page_counts,
+        pdf_media_page_counts=pdf_media_page_counts,
         layout_presets=LAYOUT_PRESETS,
         display_zones=display_zones,
         zone_playlists=zone_playlists,

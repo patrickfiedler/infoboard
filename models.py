@@ -406,6 +406,15 @@ def get_pdf_page_count(media_id, display_id):
         ).fetchone()[0]
 
 
+def get_all_pdf_page_counts():
+    """Return {media_id: page_count} for all rendered PDFs (display-agnostic)."""
+    with get_db() as conn:
+        rows = conn.execute(
+            'SELECT media_id, COUNT(*) as cnt FROM pdf_renders GROUP BY media_id'
+        ).fetchall()
+    return {r['media_id']: r['cnt'] for r in rows}
+
+
 def add_pdf_render(media_id, display_id, page_number, render_filename):
     with get_db() as conn:
         conn.execute(

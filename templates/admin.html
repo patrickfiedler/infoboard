@@ -646,6 +646,8 @@
                         <td>
                             <span class="original-name" onclick="toggleRename({{ item.id }})">{{ item.original_name }}</span>
                             {% if item.content_type == 'pdf' %}
+                            {% set pc = pdf_media_page_counts.get(item.id, 0) %}
+                            {% if pc > 1 %}<span style="font-size:11px;color:#aaa;margin-left:6px;">{{ pc }} Seiten</span>{% endif %}
                             <span class="render-status" data-media-id="{{ item.id }}" style="display:none;font-size:11px;color:#888;margin-left:6px;">⏳ wird gerendert…</span>
                             {% endif %}
                             <form method="POST" action="{{ url_for('rename_media', media_id=item.id) }}"
