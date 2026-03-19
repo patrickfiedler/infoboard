@@ -826,8 +826,23 @@
             headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
             body: 'duration=' + duration
         }).then(function(r) { return r.json(); }).then(function(data) {
+            var cell = e.target.closest('.dur-cell');
+            var saved = cell.querySelector('.dur-saved');
+            if (!saved) {
+                saved = document.createElement('span');
+                saved.className = 'dur-saved';
+                saved.style.cssText = 'font-size:11px;display:block;transition:opacity 0.5s;';
+                cell.appendChild(saved);
+            }
             e.target.style.borderColor = data.ok ? '#28a745' : '#dc3545';
-            setTimeout(function() { e.target.style.borderColor = ''; }, 1000);
+            saved.style.opacity = '1';
+            saved.style.color = data.ok ? '#28a745' : '#dc3545';
+            saved.textContent = data.ok ? 'gespeichert' : 'Fehler';
+            clearTimeout(saved._t);
+            saved._t = setTimeout(function() {
+                e.target.style.borderColor = '';
+                saved.style.opacity = '0';
+            }, 1500);
         });
     });
 
