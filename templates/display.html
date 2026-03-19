@@ -131,6 +131,32 @@
             white-space: nowrap;
         }
 
+        /* Ambient background */
+        #ambient-bg {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+            pointer-events: none;
+        }
+        #ambient-bg.visible { opacity: 1; }
+        #ambient-img {
+            position: absolute;
+            inset: -10%;
+            width: 120%;
+            height: 120%;
+            object-fit: cover;
+            filter: blur(40px) brightness(0.35);
+        }
+        #ambient-vignette {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at center, transparent 20%, rgba(0,0,0,0.7) 100%);
+        }
+        #content-container { position: relative; z-index: 1; }
+
         /* Subtle: flush 2px bar, no background track, no text */
         #progress-container.subtle {
             background: transparent;
@@ -149,6 +175,10 @@
     </style>
 </head>
 <body>
+    <div id="ambient-bg">
+        <img id="ambient-img" src="" alt="">
+        <div id="ambient-vignette"></div>
+    </div>
     <div id="loading">
         <div class="spinner"></div>
         Wird geladen...
@@ -176,6 +206,8 @@
         const progressContainer = document.getElementById('progress-container');
         const progressBarFill = document.getElementById('progress-bar-fill');
         const pageIndicator = document.getElementById('page-indicator');
+        const ambientBg = document.getElementById('ambient-bg');
+        const ambientImg = document.getElementById('ambient-img');
 
         // --- State ---
         var slides = [];           // flat array of slide objects (see buildSlides)
@@ -187,6 +219,16 @@
         var currentSlideDuration = 0;
         var progressIndicator = 'progress';
         var currentStateKey = null;
+        var ambientBgEnabled = false;
+
+        // --- Ambient background ---
+        function setAmbientBg(url) {
+            ambientImg.src = url;
+            ambientBg.classList.add('visible');
+        }
+        function clearAmbientBg() {
+            ambientBg.classList.remove('visible');
+        }
 
         // A slide: { type, url, duration, video_fit, scale_to_fit }
         // duration = seconds (Infinity = show until content changes, e.g. single non-PDF item)
@@ -251,6 +293,12 @@
             container.innerHTML = '';
             errorDiv.style.display = 'none';
             loadingDiv.style.display = 'block';
+
+            if (ambientBgEnabled && slide.type === 'image') {
+                setAmbientBg(slide.url);
+            } else {
+                clearAmbientBg();
+            }
 
             if (slide.type === 'pdf-page' || slide.type === 'image') {
                 var img = document.createElement('img');
@@ -355,6 +403,7 @@
                 })
                 .then(function(data) {
                     document.body.style.backgroundColor = data.background_color || '#ffffff';
+                    ambientBgEnabled = !!data.ambient_bg;
                     var newIndicator = data.progress_indicator || 'progress';
                     var newKey = getStateKey(data);
 

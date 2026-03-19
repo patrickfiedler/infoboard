@@ -299,6 +299,7 @@ def display_api(slug):
     common = {
         'background_color': display['background_color'],
         'progress_indicator': display['progress_indicator'],
+        'ambient_bg': bool(display['ambient_bg']),
     }
 
     # --- Playlist mode ---
@@ -576,6 +577,7 @@ def update_display_settings(display_id):
     height = request.form.get('height', type=int)
     background_color = request.form.get('background_color', '').strip()
     progress_indicator = request.form.get('progress_indicator', '').strip()
+    ambient_bg = 1 if request.form.get('ambient_bg') else 0
 
     errors = []
     if not name:
@@ -598,7 +600,8 @@ def update_display_settings(display_id):
 
     update_display(display_id, name=name, width=width, height=height,
                    background_color=background_color,
-                   progress_indicator=progress_indicator)
+                   progress_indicator=progress_indicator,
+                   ambient_bg=ambient_bg)
 
     if resolution_changed:
         display = get_display(display_id)

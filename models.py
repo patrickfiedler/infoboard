@@ -45,6 +45,12 @@ def init_db():
         except Exception:
             pass  # Column already exists
 
+        # Migrate: add ambient_bg column if upgrading from older schema
+        try:
+            conn.execute("ALTER TABLE displays ADD COLUMN ambient_bg INTEGER NOT NULL DEFAULT 1")
+        except Exception:
+            pass  # Column already exists
+
         conn.execute('''
             CREATE TABLE IF NOT EXISTS media_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -217,7 +223,7 @@ def create_display(name, slug, width, height):
 
 def update_display(display_id, **kwargs):
     allowed = {'name', 'width', 'height', 'selected_media_id',
-               'cycle_interval', 'background_color', 'progress_indicator', 'video_fit'}
+               'cycle_interval', 'background_color', 'progress_indicator', 'video_fit', 'ambient_bg'}
     fields = [(k, v) for k, v in kwargs.items() if k in allowed and v is not None]
     if not fields:
         return
