@@ -528,13 +528,6 @@ def admin():
         sid = d['selected_media_id']
         display_current[d['id']] = get_newest_media() if sid == 0 else get_media(sid)
 
-    # For each media item, collect which display IDs have it selected
-    selected_on = {}  # media_id → list of display ids
-    for d in displays:
-        sid = d['selected_media_id']
-        if sid != 0:
-            selected_on.setdefault(sid, []).append(d['id'])
-
     auto_cleanup_enabled = get_setting('auto_cleanup_enabled', 'true')
     auto_cleanup_days = int(get_setting('auto_cleanup_days', '180'))
 
@@ -583,7 +576,6 @@ def admin():
         media_list=media_list,
         page=page,
         total_pages=total_pages,
-        selected_on=selected_on,
         auto_cleanup_enabled=auto_cleanup_enabled,
         auto_cleanup_days=auto_cleanup_days,
         youtube_params=youtube_params,
@@ -721,55 +713,6 @@ def delete_display_route(display_id):
     flash('Display gelöscht', 'success')
     return redirect(url_for('admin'))
 
-
-@app.route('/admin/display/<int:display_id>/select/<int:media_id>', methods=['POST'])
-@login_required
-def select_for_display(display_id, media_id):
-    display = get_display(display_id)
-    media = get_media(media_id)
-
-    if not display or not media:
-        flash('Display oder Inhalt nicht gefunden', 'error')
-        return redirect(url_for('admin'))
-
-    update_display(display_id, selected_media_id=media_id)
-    flash(f'"{media["original_name"]}" wird auf "{display["name"]}" angezeigt', 'success')
-    return redirect(url_for('admin'))
-
-
-@app.route('/admin/display/<int:display_id>/select-newest', methods=['POST'])
-@login_required
-def select_newest_for_display(display_id):
-    display = get_display(display_id)
-    if not display:
-        flash('Display nicht gefunden', 'error')
-        return redirect(url_for('admin'))
-
-    update_display(display_id, selected_media_id=0)
-    flash(f'"{display["name"]}" zeigt jetzt den neuesten Inhalt', 'success')
-    return redirect(url_for('admin'))
-
-
-@app.route('/admin/display/<int:display_id>/select-direct', methods=['POST'])
-@login_required
-def select_direct_for_display(display_id):
-    display = get_display(display_id)
-    if not display:
-        flash('Display nicht gefunden', 'error')
-        return redirect(url_for('admin'))
-
-    media_id = request.form.get('media_id', type=int)
-    if media_id == 0:
-        update_display(display_id, selected_media_id=0)
-        flash(f'"{display["name"]}" zeigt jetzt den neuesten Inhalt', 'success')
-    else:
-        media = get_media(media_id)
-        if not media:
-            flash('Inhalt nicht gefunden', 'error')
-            return redirect(url_for('admin'))
-        update_display(display_id, selected_media_id=media_id)
-        flash(f'"{media["original_name"]}" wird auf "{display["name"]}" angezeigt', 'success')
-    return redirect(url_for('admin'))
 
 
 @app.route('/admin/display/<int:display_id>/playlist/add', methods=['POST'])
@@ -1189,19 +1132,6 @@ def update_display_layout(display_id):
     flash(f'Layout: {LAYOUT_PRESETS[preset]["label"]}', 'success')
     return redirect(url_for('admin'))
 
-
-@app.route('/admin/zone/<int:zone_id>/settings', methods=['POST'])
-@login_required
-def update_zone_settings_route(zone_id):
-    zone = get_zone(zone_id)
-    if not zone:
-        flash('Zone nicht gefunden', 'error')
-        return redirect(url_for('admin'))
-    selected_media_id = request.form.get('selected_media_id', 0, type=int)
-    cycle_interval = max(1, request.form.get('cycle_interval', 10, type=int))
-    update_zone_settings(zone_id, selected_media_id, cycle_interval)
-    flash('Zone-Einstellungen gespeichert', 'success')
-    return redirect(url_for('admin'))
 
 
 @app.route('/admin/zone/<int:zone_id>/playlist/add', methods=['POST'])

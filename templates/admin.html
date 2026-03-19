@@ -107,7 +107,6 @@
         .badge-youtube { background: #dc3545; }
         .badge-url     { background: #6c757d; }
         .badge-gallery { background: #e67e22; }
-        .badge-active  { background: #28a745; }
 
         /* Pagination */
         .pagination { display: flex; justify-content: center; gap: 8px; margin-top: 15px; }
@@ -171,11 +170,6 @@
         .display-card-status .status-label { color: #888; }
         .display-card-status .status-name { font-weight: 600; color: #333; }
 
-        /* Direct select form in playlist column */
-        .direct-select-wrap { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #eee; }
-        .direct-select-wrap .form-row { margin-bottom: 4px; }
-        .direct-select-note { font-size: 11px; color: #aaa; margin-top: 4px; }
-
         /* YouTube options row */
         .yt-opts-row { background: #f8f9fa; }
         .yt-opts-row td { padding: 10px 16px; }
@@ -201,10 +195,6 @@
         .drag-handle:active { cursor: grabbing; }
         .dur-input { width: 60px !important; padding: 4px 6px; font-size: 13px; border: 1px solid #ddd; border-radius: 4px; transition: border-color 0.4s; }
         .dur-cell { white-space: nowrap; }
-
-        /* Active media row */
-        tr.is-active td { background: #f0fdf4 !important; }
-        tr.is-active td:first-child { border-left: 3px solid #28a745; padding-left: 9px; }
 
         /* Rename inline */
         .original-name { cursor: pointer; color: #667eea; }
@@ -323,13 +313,7 @@
                         <span class="status-name">{{ pl|length }} {{ 'Eintrag' if pl|length == 1 else 'Einträge' }}</span>
                     {% else %}
                         <span class="status-dot"></span>
-                        {% set cur = display_current.get(d.id) %}
-                        {% if d.selected_media_id == 0 %}
-                            <span class="status-label">Neueste:</span>
-                        {% else %}
-                            <span class="status-label">Direktwahl:</span>
-                        {% endif %}
-                        <span class="status-name">{{ cur.original_name if cur else '—' }}</span>
+                        <span class="status-label">Neueste automatisch</span>
                     {% endif %}
                 </div>
 
@@ -399,31 +383,9 @@
 
                     <!-- Playlist column -->
                     <div class="card-col-playlist">
-                        <div class="direct-select-wrap">
-                            <h3 style="margin-bottom:10px;">Einzelinhalt</h3>
-                            <form method="POST" action="{{ url_for('select_direct_for_display', display_id=d.id) }}">
-                                <div class="form-row">
-                                    <div class="form-group" style="flex:1;">
-                                        <select name="media_id" required>
-                                            <option value="0" {% if d.selected_media_id == 0 %}selected{% endif %}>— Neueste automatisch —</option>
-                                            {% for item in all_media if item.content_type != 'gallery' %}
-                                            <option value="{{ item.id }}" {% if d.selected_media_id == item.id %}selected{% endif %}>
-                                                {{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})
-                                            </option>
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <button type="submit" class="btn-secondary">Anzeigen</button>
-                                    </div>
-                                </div>
-                            </form>
-                            <p class="direct-select-note">Playlist hat Vorrang. Galerien nur per Playlist. PDF/Galerie teilt Zeit auf Seiten/Bilder auf.</p>
-                        </div>
-
                         <h3>Playlist</h3>
                         {% if not pl %}
-                        <p style="color:#999;font-size:13px;margin-bottom:12px;" class="playlist-empty-{{ d.id }}">Noch keine Einträge.</p>
+                        <p style="color:#999;font-size:13px;margin-bottom:12px;" class="playlist-empty-{{ d.id }}">Leer — neuester Inhalt wird automatisch angezeigt.</p>
                         {% endif %}
                         <table class="playlist-table" {% if not pl %}style="display:none;"{% endif %}>
                             <tbody class="playlist-sortable" data-display="{{ d.id }}">
@@ -492,85 +454,51 @@
                         <div style="font-size:13px;font-weight:700;color:#667eea;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">
                             Zone {{ zone.zone_index }}: {{ zone_label }}
                         </div>
-                        <div class="display-card-columns" style="border-top:none;">
-                            <!-- Zone settings -->
-                            <div class="card-col-settings" style="background:#f5f7ff;">
-                                <h3>Einzel &amp; Interval</h3>
-                                <form method="POST" action="{{ url_for('update_zone_settings_route', zone_id=zone.id) }}">
-                                    <div class="form-row" style="margin-bottom:10px;">
-                                        <div class="form-group">
-                                            <label>Einzelinhalt</label>
-                                            <select name="selected_media_id">
-                                                <option value="0" {% if zone.selected_media_id == 0 %}selected{% endif %}>— Neueste automatisch —</option>
-                                                {% for item in all_media if item.content_type != 'gallery' %}
-                                                <option value="{{ item.id }}" {% if zone.selected_media_id == item.id %}selected{% endif %}>
-                                                    {{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})
-                                                </option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="form-group form-group-sm">
-                                            <label>Anzeigedauer (s)</label>
-                                            <input type="number" name="cycle_interval" value="{{ zone.cycle_interval }}" min="1" required>
-                                            <small style="color:#aaa;font-size:11px;">Gesamt pro Inhalt; bei PDF/Galerie auf Seiten/Bilder aufgeteilt.</small>
-                                        </div>
-                                        <div>
-                                            <label>&nbsp;</label>
-                                            <button type="submit" class="btn-success">Speichern</button>
-                                        </div>
-                                    </div>
-                                </form>
+                        {% if not zpl %}
+                        <p style="color:#999;font-size:13px;margin-bottom:12px;" class="zone-playlist-empty-{{ zone.id }}">Leer — neuester Inhalt wird automatisch angezeigt.</p>
+                        {% endif %}
+                        <table class="playlist-table" {% if not zpl %}style="display:none;"{% endif %}>
+                            <tbody class="zone-playlist-sortable" data-zone="{{ zone.id }}">
+                            {% for pi in zpl %}
+                            <tr data-id="{{ pi.id }}">
+                                <td class="drag-handle">☰</td>
+                                <td>
+                                    <span class="badge badge-{{ pi.content_type }}" style="font-size:10px;">{{ type_labels.get(pi.content_type, pi.content_type) }}</span>
+                                    {{ pi.original_name }}
+                                </td>
+                                <td class="dur-cell">
+                                    <input type="number" class="dur-input zone-dur-input" data-zone="{{ zone.id }}" data-item="{{ pi.id }}"
+                                           value="{{ pi.duration }}" min="1">
+                                    <span style="font-size:12px;color:#999;">s</span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger zone-remove-item"
+                                            data-zone="{{ zone.id }}" data-item="{{ pi.id }}">✕</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                        <form class="zone-playlist-add-form" data-zone="{{ zone.id }}" style="margin-top:8px;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Inhalt</label>
+                                    <select name="media_id" required>
+                                        {% for item in all_media %}
+                                        <option value="{{ item.id }}">{{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="form-group form-group-sm">
+                                    <label>Dauer (s)</label>
+                                    <input type="number" name="duration" value="10" min="1" required>
+                                </div>
+                                <div>
+                                    <label>&nbsp;</label>
+                                    <button type="submit">Hinzufügen</button>
+                                </div>
                             </div>
-                            <!-- Zone playlist -->
-                            <div class="card-col-playlist">
-                                <h3>Playlist</h3>
-                                {% if not zpl %}
-                                <p style="color:#999;font-size:13px;margin-bottom:12px;" class="zone-playlist-empty-{{ zone.id }}">Noch keine Einträge.</p>
-                                {% endif %}
-                                <table class="playlist-table" {% if not zpl %}style="display:none;"{% endif %}>
-                                    <tbody class="zone-playlist-sortable" data-zone="{{ zone.id }}">
-                                    {% for pi in zpl %}
-                                    <tr data-id="{{ pi.id }}">
-                                        <td class="drag-handle">☰</td>
-                                        <td>
-                                            <span class="badge badge-{{ pi.content_type }}" style="font-size:10px;">{{ type_labels.get(pi.content_type, pi.content_type) }}</span>
-                                            {{ pi.original_name }}
-                                        </td>
-                                        <td class="dur-cell">
-                                            <input type="number" class="dur-input zone-dur-input" data-zone="{{ zone.id }}" data-item="{{ pi.id }}"
-                                                   value="{{ pi.duration }}" min="1">
-                                            <span style="font-size:12px;color:#999;">s</span>
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-danger zone-remove-item"
-                                                    data-zone="{{ zone.id }}" data-item="{{ pi.id }}">✕</button>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                    </tbody>
-                                </table>
-                                <form class="zone-playlist-add-form" data-zone="{{ zone.id }}" style="margin-top:8px;">
-                                    <div class="form-row">
-                                        <div class="form-group">
-                                            <label>Inhalt</label>
-                                            <select name="media_id" required>
-                                                {% for item in all_media %}
-                                                <option value="{{ item.id }}">{{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="form-group form-group-sm">
-                                            <label>Dauer (s)</label>
-                                            <input type="number" name="duration" value="10" min="1" required>
-                                        </div>
-                                        <div>
-                                            <label>&nbsp;</label>
-                                            <button type="submit">Hinzufügen</button>
-                                        </div>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
+                        </form>
                     </div>
                     {% endfor %}
                 </div>
@@ -676,13 +604,12 @@
                         <th>Typ</th>
                         <th>Datum</th>
                         <th>Größe</th>
-                        <th>Anzeigen auf</th>
                         <th>Aktionen</th>
                     </tr>
                 </thead>
                 <tbody>
                 {% for item in media_list %}
-                    <tr{% if item.id in selected_on %} class="is-active"{% endif %}>
+                    <tr>
                         <td>
                             <span class="original-name" onclick="toggleRename({{ item.id }})">{{ item.original_name }}</span>
                             <form method="POST" action="{{ url_for('rename_media', media_id=item.id) }}"
@@ -704,21 +631,6 @@
                             {% else %}
                                 —
                             {% endif %}
-                        </td>
-                        <td>
-                            {% for d in displays %}
-                                {% if d.id in selected_on.get(item.id, []) %}
-                                    <div style="margin-bottom:3px;">
-                                        <span class="badge badge-active">✓ {{ d.name }}</span>
-                                    </div>
-                                {% else %}
-                                    <div style="margin-bottom:3px;">
-                                        <form method="POST" action="{{ url_for('select_for_display', display_id=d.id, media_id=item.id) }}" style="display:inline;">
-                                            <button type="submit" class="btn-sm" style="background:#e9ecef;color:#555;font-weight:500;">{{ d.name }}</button>
-                                        </form>
-                                    </div>
-                                {% endif %}
-                            {% endfor %}
                         </td>
                         <td>
                             <div class="actions">
