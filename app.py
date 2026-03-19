@@ -161,6 +161,32 @@ def render_pdf_for_all_displays(filepath, media_id):
     return results
 
 
+# ---------- Thumbnail helper ----------
+
+def get_thumbnail_url(media, display_id, gallery_images_map):
+    """Return a thumbnail URL string for a media item, or None if unavailable."""
+    if not media:
+        return None
+    ct = media['content_type']
+    if ct == 'pdf':
+        renders = get_pdf_renders(media['id'], display_id)
+        if renders:
+            return url_for('serve_render', display_id=display_id, filename=renders[0]['render_filename'])
+    elif ct == 'image':
+        if media['filename']:
+            return url_for('serve_upload', filename=media['filename'])
+    elif ct == 'gallery':
+        imgs = gallery_images_map.get(media['id'], [])
+        if imgs:
+            return url_for('serve_upload', filename=imgs[0]['filename'])
+    elif ct == 'youtube':
+        if media['url']:
+            m = re.search(r'/embed/([a-zA-Z0-9_-]+)', media['url'])
+            if m:
+                return f'https://img.youtube.com/vi/{m.group(1)}/hqdefault.jpg'
+    return None
+
+
 # ---------- URL helpers ----------
 
 def make_youtube_embed_with_params(video_id, controls=False, cc=False, cc_lang='', rel=False, vq='hd1080'):
@@ -469,11 +495,17 @@ def admin():
     }
     gallery_image_counts = {mid: len(imgs) for mid, imgs in gallery_images_map.items()}
 
+    display_thumbnails = {
+        d['id']: get_thumbnail_url(display_current.get(d['id']), d['id'], gallery_images_map)
+        for d in displays
+    }
+
     return render_template(
         'admin.html',
         displays=displays,
         display_current=display_current,
         display_playlists=display_playlists,
+        display_thumbnails=display_thumbnails,
         all_media=all_media,
         media_list=media_list,
         page=page,

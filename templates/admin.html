@@ -211,6 +211,45 @@
         .original-name:hover { text-decoration: underline; }
         .rename-form { display: none; }
         .rename-form.active { display: flex; gap: 5px; margin-top: 5px; }
+
+        /* Tabs */
+        .tab-bar {
+            display: flex;
+            border-bottom: 2px solid #e1e1e1;
+            margin-bottom: 30px;
+        }
+        .tab-btn {
+            padding: 10px 24px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #888;
+            cursor: pointer;
+            border-radius: 0;
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .tab-btn:hover { color: #333; background: none; }
+        .tab-btn.active { color: #667eea; border-bottom-color: #667eea; }
+
+        /* Display preview thumbnail */
+        .display-preview-thumb {
+            width: 120px;
+            height: 68px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            flex-shrink: 0;
+        }
+        .display-preview-placeholder {
+            width: 120px; height: 68px;
+            border: 1px solid #ddd; border-radius: 4px;
+            background: #f8f9fa;
+            display: flex; align-items: center; justify-content: center;
+            color: #ccc; font-size: 20px; flex-shrink: 0;
+        }
     </style>
 </head>
 <body>
@@ -230,6 +269,12 @@
         {% endif %}
     {% endwith %}
 
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="displays" onclick="switchTab('displays', this)">Displays</button>
+        <button class="tab-btn" data-tab="content" onclick="switchTab('content', this)">Inhalte</button>
+    </div>
+
+    <div id="tab-displays">
     <!-- ===== DISPLAYS ===== -->
     <div class="section">
         <h2>Displays</h2>
@@ -257,6 +302,17 @@
                         </form>
                         {% endif %}
                     </div>
+                    {% set thumb = display_thumbnails.get(d.id) %}
+                    {% if thumb %}
+                        <img src="{{ thumb }}" class="display-preview-thumb" alt="Vorschau">
+                    {% else %}
+                        {% set cur = display_current.get(d.id) %}
+                        <div class="display-preview-placeholder">
+                            {% if cur and cur['content_type'] == 'url' %}🌐
+                            {% elif cur and cur['content_type'] == 'video' %}▶
+                            {% else %}—{% endif %}
+                        </div>
+                    {% endif %}
                 </div>
 
                 {% set pl = display_playlists.get(d.id, []) %}
@@ -432,7 +488,9 @@
             </form>
         </div>
     </div>
+    </div>{# end tab-displays #}
 
+    <div id="tab-content" style="display:none">
     <!-- ===== UPLOAD ===== -->
     <div class="section">
         <h2>Inhalt hochladen</h2>
@@ -715,11 +773,30 @@
             </div>
         </div>
     </div>
+    </div>{# end tab-content #}
 
 </div>
 
 <script src="{{ url_for('static', filename='js/sortable.min.js') }}"></script>
 <script>
+    // Tab switching
+    function switchTab(name, btn) {
+        ['displays', 'content'].forEach(function(t) {
+            document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
+        });
+        document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        sessionStorage.setItem('adminTab', name);
+    }
+    // Restore tab on page load
+    (function() {
+        var saved = sessionStorage.getItem('adminTab') || 'displays';
+        if (saved !== 'displays') {
+            var btn = document.querySelector('[data-tab="' + saved + '"]');
+            if (btn) switchTab(saved, btn);
+        }
+    })();
+
     function toggleRename(id) {
         document.getElementById('rename-' + id).classList.toggle('active');
     }
