@@ -266,9 +266,11 @@
             var ct = data.content_type;
             var interval = data.cycle_interval || 10;
             if (ct === 'pdf' || ct === 'gallery') {
+                var pages = data.pages || [];
                 var slideType = ct === 'pdf' ? 'pdf-page' : 'image';
-                return (data.pages || []).map(function(url) {
-                    return { type: slideType, url: url, duration: interval };
+                var timePerPage = Math.max(1, Math.floor(interval / (pages.length || 1)));
+                return pages.map(function(url) {
+                    return { type: slideType, url: url, duration: timePerPage };
                 });
             }
             return [{ type: ct, url: data.url, duration: Infinity,
