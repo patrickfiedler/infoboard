@@ -4,6 +4,7 @@ import uuid
 import glob as glob_module
 import subprocess
 import threading
+import shutil
 import requests as http_requests
 from urllib.parse import urlparse, parse_qs
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, abort, Response
@@ -155,6 +156,18 @@ def _dpi_for_display(width, height):
     return max(100, min(300, dpi))
 
 
+def _find_same_dpi_renders(media_id, dpi, exclude_display_id):
+    """Return (display_id, renders) from any other display at the same DPI, or (None, [])."""
+    for d in get_all_displays():
+        if d['id'] == exclude_display_id:
+            continue
+        if _dpi_for_display(d['width'], d['height']) == dpi:
+            renders = get_pdf_renders(media_id, d['id'])
+            if renders:
+                return d['id'], renders
+    return None, []
+
+
 def render_pdf_for_display(filepath, media_id, display):
     """Pre-render all pages of a PDF as PNGs for one display. Returns page count."""
     display_id = display['id']
@@ -172,6 +185,27 @@ def render_pdf_for_display(filepath, media_id, display):
                 pass
 
     dpi = _dpi_for_display(display['width'], display['height'])
+
+    # Fast path: copy renders from another display at the same DPI
+    src_display_id, existing = _find_same_dpi_renders(media_id, dpi, display_id)
+    if existing:
+        src_dir = os.path.join(RENDERS_FOLDER, str(src_display_id))
+        prefix = str(uuid.uuid4())
+        pages = []
+        for i, r in enumerate(existing, 1):
+            src = os.path.join(src_dir, r['render_filename'])
+            if not os.path.exists(src):
+                break  # source files missing — fall through to pdftoppm below
+            dst_fname = f'{prefix}-{i}.png'
+            shutil.copy2(src, os.path.join(render_dir, dst_fname))
+            add_pdf_render(media_id, display_id, i, dst_fname)
+            pages.append(os.path.join(render_dir, dst_fname))
+        else:
+            _render_pdf_spreads(pages, media_id, display_id, render_dir)
+            return len(pages)
+        # If we broke out (missing source files), clear partial records and fall through
+        delete_pdf_renders(media_id, display_id)
+
     prefix = str(uuid.uuid4())
     prefix_path = os.path.join(render_dir, prefix)
 
