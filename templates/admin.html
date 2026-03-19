@@ -302,16 +302,25 @@
                             {% set zone_obj = d_zones | selectattr('zone_index', 'equalto', zi) | first | default(none) %}
                             {% if zone_obj %}
                                 {% set thumb = zone_thumbnails.get(zone_obj.id) %}
+                                {% set zpl = zone_playlists.get(zone_obj.id, []) %}
+                                {% set first_ct = zpl[0].content_type if zpl else none %}
                             {% elif zi == 0 %}
                                 {% set thumb = display_thumbnails.get(d.id) %}
+                                {% set dpl = display_playlists.get(d.id, []) %}
+                                {% set first_ct = dpl[0].content_type if dpl else none %}
                             {% else %}
                                 {% set thumb = none %}
+                                {% set first_ct = none %}
                             {% endif %}
                             <div class="pz" style="top:{{ geo.top }};left:{{ geo.left }};width:{{ geo.width }};height:{{ geo.height }};">
                                 {% if thumb %}
                                     <img src="{{ thumb }}" alt="">
                                 {% else %}
-                                    <div class="pz-empty">—</div>
+                                    <div class="pz-empty">
+                                        {% if first_ct == 'url' %}🌐
+                                        {% elif first_ct == 'video' %}▶
+                                        {% else %}—{% endif %}
+                                    </div>
                                 {% endif %}
                             </div>
                         {% endfor %}
