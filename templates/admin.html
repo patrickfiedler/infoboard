@@ -662,6 +662,7 @@
                                         <button type="submit">Hochladen</button>
                                     </div>
                                 </div>
+                                <p id="gallery-upload-status-{{ item.id }}" style="font-size:13px;margin-top:8px;"></p>
                             </form>
                         </td>
                     </tr>
@@ -956,13 +957,25 @@
         form.addEventListener('submit', function(e) {
             e.preventDefault();
             var galleryId = form.dataset.gallery;
+            var btn = form.querySelector('button[type="submit"]');
+            var status = document.getElementById('gallery-upload-status-' + galleryId);
+
+            btn.disabled = true;
+            status.style.color = '#888';
+            status.textContent = 'Wird hochgeladen…';
+
             var formData = new FormData(form);
             fetch('/admin/gallery/' + galleryId + '/upload', {
                 method: 'POST',
                 headers: {'X-Requested-With': 'XMLHttpRequest'},
                 body: formData
             }).then(function(r) { return r.json(); }).then(function(data) {
-                if (!data.ok) return;
+                btn.disabled = false;
+                if (!data.ok) {
+                    status.style.color = '#dc3545';
+                    status.textContent = 'Fehler beim Hochladen.';
+                    return;
+                }
                 var tbody = document.querySelector('.gallery-sortable[data-gallery="' + galleryId + '"]');
                 data.images.forEach(function(img) { tbody.appendChild(buildGalleryImageRow(galleryId, img)); });
                 tbody.closest('table').style.display = '';
@@ -970,6 +983,13 @@
                 if (empty) empty.style.display = 'none';
                 updateGalleryCount(galleryId, tbody.querySelectorAll('tr').length);
                 form.reset();
+                status.style.color = '#28a745';
+                status.textContent = '✓ ' + data.images.length + ' Bild' + (data.images.length !== 1 ? 'er' : '') + ' hochgeladen.';
+                setTimeout(function() { status.textContent = ''; }, 4000);
+            }).catch(function() {
+                btn.disabled = false;
+                status.style.color = '#dc3545';
+                status.textContent = 'Fehler beim Hochladen.';
             });
         });
     });
