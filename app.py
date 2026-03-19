@@ -232,21 +232,36 @@ def render_pdf_for_display(filepath, media_id, display):
     src_display_id, existing = _find_same_dpi_renders(media_id, dpi, display_id)
     if existing:
         src_dir = os.path.join(RENDERS_FOLDER, str(src_display_id))
-        prefix = str(uuid.uuid4())
-        pages = []
-        for i, r in enumerate(existing, 1):
-            src = os.path.join(src_dir, r['render_filename'])
-            if not os.path.exists(src):
-                break  # source files missing — fall through to pdftoppm below
-            dst_fname = f'{prefix}-{i}.png'
-            shutil.copy2(src, os.path.join(render_dir, dst_fname))
-            add_pdf_render(media_id, display_id, i, dst_fname)
-            pages.append(os.path.join(render_dir, dst_fname))
-        else:
-            _render_pdf_spreads(pages, media_id, display_id, render_dir)
-            return len(pages)
-        # If we broke out (missing source files), clear partial records and fall through
+
+        def _copy_renders(records, spread_type=None):
+            """Copy a list of render records to render_dir. Returns False if any file missing."""
+            new_prefix = str(uuid.uuid4())
+            copied = []
+            for i, r in enumerate(records, 1):
+                src = os.path.join(src_dir, r['render_filename'])
+                if not os.path.exists(src):
+                    return False
+                dst_fname = f'{new_prefix}-{i}.png'
+                shutil.copy2(src, os.path.join(render_dir, dst_fname))
+                copied.append((i, dst_fname))
+            for i, dst_fname in copied:
+                if spread_type:
+                    add_pdf_spread_render(media_id, display_id, spread_type, i, dst_fname)
+                else:
+                    add_pdf_render(media_id, display_id, i, dst_fname)
+            return True
+
+        src_spreads_paired = get_pdf_spread_renders(media_id, src_display_id, 'paired')
+        src_spreads_book   = get_pdf_spread_renders(media_id, src_display_id, 'book')
+
+        if (_copy_renders(existing) and
+                _copy_renders(src_spreads_paired, 'paired') and
+                _copy_renders(src_spreads_book, 'book')):
+            return len(existing)
+
+        # Something was missing — clean up partial state and fall through to full render
         delete_pdf_renders(media_id, display_id)
+        delete_pdf_spread_renders(media_id, display_id)
 
     page_count = _pdf_page_count(filepath)
     workers = min(page_count, _CPU_WORKERS) if page_count else 1
