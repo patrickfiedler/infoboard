@@ -105,7 +105,7 @@ Der Service ist so konfiguriert, dass er:
 
 3. Testen Sie die Anwendung manuell:
    ```bash
-   cd /mnt/Speicherplatz/Nextcloud/Dokumente/coding/infoboard
+   cd /path/to/infoboard
    python3 app.py
    ```
 
@@ -113,7 +113,7 @@ Der Service ist so konfiguriert, dass er:
 
 Stellen Sie sicher, dass der Benutzer Schreibrechte hat:
 ```bash
-sudo chown -R patrick:patrick /mnt/Speicherplatz/Nextcloud/Dokumente/coding/infoboard
+sudo chown -R <youruser>:<youruser> /path/to/infoboard
 ```
 
 ### Port bereits belegt
