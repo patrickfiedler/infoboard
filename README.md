@@ -5,9 +5,11 @@ Self-hosted digital signage for browsers. Display PDFs, images, galleries, video
 ## Features
 
 - **Multiple displays** — each screen gets its own URL (`/display/<slug>`)
-- **Playlist per display** — drag-and-drop ordering, per-item duration
+- **Multi-zone layouts** — split a display into up to 4 zones (7 presets), each with its own playlist
+- **Playlist per display/zone** — drag-and-drop ordering, per-item duration
 - **Media types**: PDF (multi-page), image, image gallery, local video, YouTube embed, website (via proxy)
-- **Server-side PDF rendering** — PDFs pre-rendered to images via poppler-utils, no client-side PDF engine needed
+- **Server-side PDF rendering** — PDFs pre-rendered to images via poppler-utils, no client-side PDF engine needed; parallel rendering across CPU cores
+- **PDF spread view** — side-by-side page pairs (book/magazine layout), configurable per playlist item
 - **Image galleries** — batch upload, sortable, shown as slideshow
 - **Website proxy** — embeds external pages by stripping X-Frame-Options/CSP headers
 - **Admin panel** — upload, rename, delete media; manage playlists; configure per-display settings
@@ -75,6 +77,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for systemd service setup and update procedur
 | `port` | `8080` | Server port |
 | `host` | `0.0.0.0` | Bind address |
 | `upload_folder` | `uploads` | Media storage directory |
+| `render_workers` | `null` | Max parallel PDF render workers (null = all CPU cores) |
 
 ## Usage
 
