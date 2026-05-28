@@ -171,6 +171,12 @@ echo ""
 echo -e "${YELLOW}[4/5] Dependencies and database migrations...${NC}"
 mkdir -p "$SCRIPT_DIR/uploads" "$SCRIPT_DIR/renders"
 
+if [ -f "$SCRIPT_DIR/kundenstopper.db" ] && [ ! -f "$SCRIPT_DIR/infoboard.db" ]; then
+    echo "Renaming kundenstopper.db → infoboard.db..."
+    mv "$SCRIPT_DIR/kundenstopper.db" "$SCRIPT_DIR/infoboard.db"
+    echo -e "${GREEN}✓ Database renamed${NC}"
+fi
+
 if git -C "$SCRIPT_DIR" diff "$CURRENT_COMMIT" "$NEW_COMMIT" --name-only 2>/dev/null | grep -q "requirements.txt"; then
     echo "requirements.txt changed — updating dependencies..."
     $PIP install -q -r "$SCRIPT_DIR/requirements.txt" --upgrade
