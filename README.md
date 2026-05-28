@@ -1,6 +1,6 @@
 # Infoboard
 
-Self-hosted digital signage for browsers. Display PDFs, images, galleries, videos and YouTube on multiple screens — managed via a web-based admin panel.
+Self-hosted digital signage that runs in any modern browser. No dedicated player software needed — point a browser at a URL and it displays your content. Manage multiple screens and zones from a single web-based admin panel.
 
 ## Features
 
