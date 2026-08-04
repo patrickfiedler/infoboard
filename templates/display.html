@@ -112,7 +112,7 @@
         /* Subtle progress variant */
         .zone-progress.subtle { background: transparent; padding: 0; }
         .zone-progress.subtle .zone-progress-bar-bg {
-            height: 3px;
+            height: 8px;
             background: rgba(150, 150, 150, 0.2);
             border-radius: 0;
         }
@@ -196,6 +196,12 @@
 
     <script>
         var DISPLAY_SLUG = {{ slug | tojson }};
+
+        // Progress bar tick rate: 4x/sec reads as smooth for a slow linear fill
+        // without the cost of a continuous CSS transition (each tick is an
+        // instant transform write, not an animated one).
+        var PROGRESS_TICK_MS = 250;
+        var PROGRESS_TICK_SECONDS = PROGRESS_TICK_MS / 1000;
 
         function SlideEngine(zoneEl, apiUrl, opts) {
             this.zoneEl          = zoneEl;
@@ -358,7 +364,7 @@
                 if (this.progressIndicator === 'subtle') this.progressEl.classList.add('subtle');
                 if (this.progressIndicator === 'progress')
                     this.pageIndicatorEl.textContent = (this.slideIndex + 1) + ' / ' + total;
-                this.progressFillEl.style.transform = 'scaleX(' + ((this.elapsedSeconds + 1) / this.currentSlideDuration) + ')';
+                this.progressFillEl.style.transform = 'scaleX(' + (this.elapsedSeconds / this.currentSlideDuration) + ')';
                 this.countdownEl.style.display  = 'none';
                 this.progressEl.style.display   = 'block';
             } else {
@@ -388,10 +394,10 @@
             this.elapsedSeconds       = 0;
             this.updateProgress();
             this.countdownTimer = setInterval(function() {
-                self.countdownSeconds = Math.max(0, self.countdownSeconds - 1);
-                self.elapsedSeconds++;
+                self.elapsedSeconds   = Math.min(slide.duration, self.elapsedSeconds + PROGRESS_TICK_SECONDS);
+                self.countdownSeconds = Math.max(0, Math.ceil(slide.duration - self.elapsedSeconds));
                 self.updateProgress();
-            }, 1000);
+            }, PROGRESS_TICK_MS);
             this.slideTimer = setTimeout(function() {
                 self.startSlide((self.slideIndex + 1) % self.slides.length);
             }, slide.duration * 1000);
