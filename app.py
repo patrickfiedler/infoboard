@@ -49,6 +49,19 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB
 
 RENDERS_FOLDER = 'renders'
 
+def _get_app_version():
+    """Git commit hash of the running checkout, used by the display page to
+    detect a deploy and auto-reload. Falls back to this file's mtime outside git."""
+    try:
+        return subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=os.path.dirname(os.path.abspath(__file__)), stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        return str(int(os.path.getmtime(__file__)))
+
+APP_VERSION = _get_app_version()
+
 def _p(t, l, w, h):
     return {'top': t, 'left': l, 'width': w, 'height': h}
 
@@ -512,6 +525,7 @@ def display_api(slug):
         'background_color': display['background_color'],
         'progress_indicator': display['progress_indicator'],
         'ambient_bg': bool(display['ambient_bg']),
+        'version': APP_VERSION,
     }
 
     # --- Playlist mode ---
@@ -562,6 +576,7 @@ def zone_api(slug, zone_index):
         'background_color': display['background_color'],
         'progress_indicator': display['progress_indicator'],
         'ambient_bg': bool(display['ambient_bg']),
+        'version': APP_VERSION,
     }
 
     # Playlist mode

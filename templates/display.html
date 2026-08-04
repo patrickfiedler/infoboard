@@ -408,6 +408,14 @@
             fetch(this.apiUrl)
                 .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
                 .then(function(data) {
+                    if (data.version) {
+                        if (!window.__infoboardVersion) {
+                            window.__infoboardVersion = data.version;
+                        } else if (window.__infoboardVersion !== data.version) {
+                            location.reload();
+                            return;
+                        }
+                    }
                     document.body.style.backgroundColor = data.background_color || '#ffffff';
                     self.ambientBgEnabled = !!data.ambient_bg;
                     var newIndicator = data.progress_indicator || 'progress';
