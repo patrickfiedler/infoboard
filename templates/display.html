@@ -112,7 +112,7 @@
         /* Subtle progress variant */
         .zone-progress.subtle { background: transparent; padding: 0; }
         .zone-progress.subtle .zone-progress-bar-bg {
-            height: 8px;
+            height: 5px;
             background: rgba(150, 150, 150, 0.2);
             border-radius: 0;
         }
@@ -197,10 +197,10 @@
     <script>
         var DISPLAY_SLUG = {{ slug | tojson }};
 
-        // Progress bar tick rate: 4x/sec reads as smooth for a slow linear fill
+        // Progress bar tick rate: 8x/sec reads as smooth for a slow linear fill
         // without the cost of a continuous CSS transition (each tick is an
         // instant transform write, not an animated one).
-        var PROGRESS_TICK_MS = 250;
+        var PROGRESS_TICK_MS = 125;
         var PROGRESS_TICK_SECONDS = PROGRESS_TICK_MS / 1000;
 
         function SlideEngine(zoneEl, apiUrl, opts) {
