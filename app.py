@@ -867,6 +867,7 @@ def update_display_settings(display_id):
     background_color = request.form.get('background_color', '').strip()
     progress_indicator = request.form.get('progress_indicator', '').strip()
     ambient_bg = 1 if request.form.get('ambient_bg') else 0
+    cycle_interval = request.form.get('cycle_interval', type=int)
 
     errors = []
     if not name:
@@ -879,6 +880,8 @@ def update_display_settings(display_id):
         errors.append('Ungültige Hintergrundfarbe')
     if progress_indicator not in ('progress', 'subtle', 'countdown', 'none'):
         errors.append('Ungültige Fortschrittsanzeige')
+    if not cycle_interval or cycle_interval < 1:
+        errors.append('Ungültige Standard-Dauer')
 
     if errors:
         for e in errors:
@@ -890,7 +893,8 @@ def update_display_settings(display_id):
     update_display(display_id, name=name, width=width, height=height,
                    background_color=background_color,
                    progress_indicator=progress_indicator,
-                   ambient_bg=ambient_bg)
+                   ambient_bg=ambient_bg,
+                   cycle_interval=cycle_interval)
 
     if resolution_changed:
         display = get_display(display_id)

@@ -357,6 +357,10 @@
                                     <label>Höhe (px)</label>
                                     <input type="number" name="height" value="{{ d.height }}" min="1" required>
                                 </div>
+                                <div class="form-group form-group-sm">
+                                    <label>Standard-Dauer (s)</label>
+                                    <input type="number" name="cycle_interval" value="{{ d.cycle_interval }}" min="1" required>
+                                </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
@@ -460,7 +464,7 @@
                                 </div>
                                 <div class="form-group form-group-sm">
                                     <label>Dauer (s)</label>
-                                    <input type="number" name="duration" value="10" min="1" required>
+                                    <input type="number" name="duration" value="{{ d.cycle_interval }}" min="1" required>
                                 </div>
                                 <div>
                                     <label>&nbsp;</label>
@@ -536,7 +540,7 @@
                                 </div>
                                 <div class="form-group form-group-sm">
                                     <label>Dauer (s)</label>
-                                    <input type="number" name="duration" value="10" min="1" required>
+                                    <input type="number" name="duration" value="{{ zone.cycle_interval }}" min="1" required>
                                 </div>
                                 <div>
                                     <label>&nbsp;</label>
