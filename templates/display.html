@@ -393,11 +393,15 @@
             this.countdownSeconds     = slide.duration;
             this.elapsedSeconds       = 0;
             this.updateProgress();
+            // Countdown text only ever changes once a second, so it doesn't need
+            // the bar's faster tick — run it at 1Hz to save the extra wakeups.
+            var tickMs      = (this.progressIndicator === 'countdown') ? 1000 : PROGRESS_TICK_MS;
+            var tickSeconds = tickMs / 1000;
             this.countdownTimer = setInterval(function() {
-                self.elapsedSeconds   = Math.min(slide.duration, self.elapsedSeconds + PROGRESS_TICK_SECONDS);
+                self.elapsedSeconds   = Math.min(slide.duration, self.elapsedSeconds + tickSeconds);
                 self.countdownSeconds = Math.max(0, Math.ceil(slide.duration - self.elapsedSeconds));
                 self.updateProgress();
-            }, PROGRESS_TICK_MS);
+            }, tickMs);
             this.slideTimer = setTimeout(function() {
                 self.startSlide((self.slideIndex + 1) % self.slides.length);
             }, slide.duration * 1000);
