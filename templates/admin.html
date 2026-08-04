@@ -425,7 +425,7 @@
                                     {% if pi.content_type == 'pdf' %}
                                         {% set page_count = pdf_page_counts.get(d.id, {}).get(pi.media_id, 0) %}
                                         {% if page_count > 1 %}
-                                        <span style="font-size:11px;color:#aaa;display:block;">{{ page_count }} Seiten · ~{{ (pi.duration // page_count) }}s/Seite</span>
+                                        <span class="per-unit-info" data-count="{{ page_count }}" data-plural="Seiten" data-singular="Seite" style="font-size:11px;color:#aaa;display:block;">{{ page_count }} Seiten · ~{{ (pi.duration // page_count) }}s/Seite</span>
                                         {% endif %}
                                         <select class="spread-select" data-display="{{ d.id }}" data-item="{{ pi.id }}"
                                                 style="font-size:11px;margin-top:4px;width:auto;">
@@ -436,7 +436,7 @@
                                     {% elif pi.content_type == 'gallery' %}
                                         {% set img_count = gallery_image_counts.get(pi.media_id, 0) %}
                                         {% if img_count > 0 %}
-                                        <span style="font-size:11px;color:#aaa;display:block;">{{ img_count }} Bilder · ~{{ (pi.duration // img_count) }}s/Bild</span>
+                                        <span class="per-unit-info" data-count="{{ img_count }}" data-plural="Bilder" data-singular="Bild" style="font-size:11px;color:#aaa;display:block;">{{ img_count }} Bilder · ~{{ (pi.duration // img_count) }}s/Bild</span>
                                         {% endif %}
                                     {% endif %}
                                 </td>
@@ -501,7 +501,7 @@
                                     {% if pi.content_type == 'pdf' %}
                                         {% set page_count = pdf_page_counts.get(d.id, {}).get(pi.media_id, 0) %}
                                         {% if page_count > 1 %}
-                                        <span style="font-size:11px;color:#aaa;display:block;">{{ page_count }} Seiten · ~{{ (pi.duration // page_count) }}s/Seite</span>
+                                        <span class="per-unit-info" data-count="{{ page_count }}" data-plural="Seiten" data-singular="Seite" style="font-size:11px;color:#aaa;display:block;">{{ page_count }} Seiten · ~{{ (pi.duration // page_count) }}s/Seite</span>
                                         {% endif %}
                                         <select class="zone-spread-select" data-zone="{{ zone.id }}" data-item="{{ pi.id }}"
                                                 style="font-size:11px;margin-top:4px;width:auto;">
@@ -512,7 +512,7 @@
                                     {% elif pi.content_type == 'gallery' %}
                                         {% set img_count = gallery_image_counts.get(pi.media_id, 0) %}
                                         {% if img_count > 0 %}
-                                        <span style="font-size:11px;color:#aaa;display:block;">{{ img_count }} Bilder · ~{{ (pi.duration // img_count) }}s/Bild</span>
+                                        <span class="per-unit-info" data-count="{{ img_count }}" data-plural="Bilder" data-singular="Bild" style="font-size:11px;color:#aaa;display:block;">{{ img_count }} Bilder · ~{{ (pi.duration // img_count) }}s/Bild</span>
                                         {% endif %}
                                     {% endif %}
                                 </td>
@@ -926,8 +926,18 @@
                 e.target.style.borderColor = '';
                 saved.style.opacity = '0';
             }, 1500);
+            if (data.ok) updatePerUnitInfo(cell, duration);
         });
     });
+
+    // Recompute the "N Seiten · ~Xs/Seite" line after a duration change, no reload needed
+    function updatePerUnitInfo(cell, duration) {
+        var info = cell.querySelector('.per-unit-info');
+        if (!info) return;
+        var count = parseInt(info.dataset.count, 10);
+        if (!count) return;
+        info.textContent = count + ' ' + info.dataset.plural + ' · ~' + Math.floor(duration / count) + 's/' + info.dataset.singular;
+    }
 
     // Spread mode auto-save (display playlists)
     document.addEventListener('change', function(e) {
@@ -1164,6 +1174,7 @@
                 e.target.style.borderColor = '';
                 saved.style.opacity = '0';
             }, 1500);
+            if (data.ok) updatePerUnitInfo(cell, duration);
         });
     });
 
