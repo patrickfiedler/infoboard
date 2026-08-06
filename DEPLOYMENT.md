@@ -29,18 +29,32 @@ Before deploying Infoboard, ensure the target machine has:
 **Debian/Ubuntu:**
 ```bash
 sudo apt update
-sudo apt install python3 python3-pip git
+sudo apt install python3 python3-pip git poppler-utils
 ```
 
 **Arch/CachyOS:**
 ```bash
-sudo pacman -S python python-pip git
+sudo pacman -S python python-pip git poppler
 ```
 
 **RHEL/Fedora:**
 ```bash
-sudo dnf install python3 python3-pip git
+sudo dnf install python3 python3-pip git poppler-utils
 ```
+
+### Font Rendering (Recommended)
+
+Infoboard pre-renders PDFs with `pdftoppm` (poppler), which substitutes a local font for any font not embedded in the PDF. Many Office-generated PDFs don't embed common fonts like Arial or Times New Roman, so without the real fonts installed, poppler falls back to a metric-compatible clone (e.g. Liberation Sans) that can look subtly different from how the PDF renders elsewhere (e.g. a browser's pdf.js viewer on Windows, which has real Arial).
+
+Install the real Microsoft core fonts to avoid this:
+
+**Debian/Ubuntu** (package is in `contrib`/`multiverse`):
+```bash
+sudo apt install ttf-mscorefonts-installer
+fc-cache -f -v
+```
+
+After installing, re-render any already-uploaded PDFs (re-upload or trigger a re-render) for the fix to take effect.
 
 ---
 

@@ -72,7 +72,7 @@ python3 app.py  # Will reinitialize database
 ### Key Components
 
 1. **Display View** (`/display`):
-   - Public-facing page that renders PDFs using PDF.js
+   - Public-facing page that displays PDFs as pre-rendered images (see PDF Rendering below)
    - Automatically cycles through pages based on configured interval
    - Polls `/api/current-pdf` every 10 seconds for updates
    - Loops indefinitely when reaching the last page
@@ -186,6 +186,9 @@ The `config.json` file must be created from `config.json.example`. Required fiel
 - `POST /admin/select/<id>`: Select specific PDF to display
 - `POST /admin/select-newest`: Auto-select newest PDF
 - `POST /admin/settings`: Update cycling interval
+
+## Workflow
+workflow_initialized = true
 
 ## Security Considerations
 
