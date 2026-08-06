@@ -17,7 +17,7 @@ echo -e "${BLUE}========================================${NC}"
 echo ""
 
 # Check if Python 3 is installed
-echo -e "${YELLOW}[1/8] Checking Python 3...${NC}"
+echo -e "${YELLOW}[1/9] Checking Python 3...${NC}"
 if ! command -v python3 &> /dev/null; then
     echo -e "${RED}Error: Python 3 is not installed${NC}"
     echo "Please install Python 3 first: sudo apt install python3 python3-pip"
@@ -28,7 +28,7 @@ echo -e "${GREEN}✓ Found: $PYTHON_VERSION${NC}"
 echo ""
 
 # Check if pip is installed
-echo -e "${YELLOW}[2/8] Checking pip...${NC}"
+echo -e "${YELLOW}[2/9] Checking pip...${NC}"
 if ! python3 -m pip --version &> /dev/null; then
     echo -e "${RED}Error: pip is not installed${NC}"
     echo "Please install pip: sudo apt install python3-pip"
@@ -37,8 +37,31 @@ fi
 echo -e "${GREEN}✓ pip is installed${NC}"
 echo ""
 
+# Check for recommended font packages (Debian/Ubuntu only)
+echo -e "${YELLOW}[3/9] Checking font packages...${NC}"
+if command -v dpkg &> /dev/null; then
+    FONT_PACKAGES=(ttf-mscorefonts-installer fonts-crosextra-carlito fonts-crosextra-caladea)
+    MISSING_FONTS=()
+    for pkg in "${FONT_PACKAGES[@]}"; do
+        if ! dpkg -s "$pkg" &> /dev/null; then
+            MISSING_FONTS+=("$pkg")
+        fi
+    done
+
+    if [ ${#MISSING_FONTS[@]} -eq 0 ]; then
+        echo -e "${GREEN}✓ All recommended font packages installed${NC}"
+    else
+        echo -e "${YELLOW}Missing font packages: ${MISSING_FONTS[*]}${NC}"
+        echo "PDFs with non-embedded Arial/Calibri/Cambria etc. render with a substitute font that can look different from other PDF viewers (see README.md)."
+        echo "Install with: sudo apt install ${MISSING_FONTS[*]}"
+    fi
+else
+    echo -e "${YELLOW}Skipping (not a Debian/Ubuntu system — dpkg not found)${NC}"
+fi
+echo ""
+
 # Ask about virtual environment
-echo -e "${YELLOW}[3/8] Virtual Environment Setup${NC}"
+echo -e "${YELLOW}[4/9] Virtual Environment Setup${NC}"
 echo "Do you want to use a virtual environment? (recommended)"
 read -p "Use venv? [Y/n]: " use_venv
 use_venv=${use_venv:-Y}
@@ -66,13 +89,13 @@ fi
 echo ""
 
 # Install dependencies
-echo -e "${YELLOW}[4/8] Installing Python dependencies...${NC}"
+echo -e "${YELLOW}[5/9] Installing Python dependencies...${NC}"
 python3 -m pip install -r "$SCRIPT_DIR/requirements.txt" --upgrade
 echo -e "${GREEN}✓ Dependencies installed${NC}"
 echo ""
 
 # Create uploads directory
-echo -e "${YELLOW}[5/8] Creating uploads directory...${NC}"
+echo -e "${YELLOW}[6/9] Creating uploads directory...${NC}"
 UPLOADS_DIR="$SCRIPT_DIR/uploads"
 if [ ! -d "$UPLOADS_DIR" ]; then
     mkdir -p "$UPLOADS_DIR"
@@ -83,7 +106,7 @@ fi
 echo ""
 
 # Create config.json if it doesn't exist
-echo -e "${YELLOW}[6/8] Configuration Setup${NC}"
+echo -e "${YELLOW}[7/9] Configuration Setup${NC}"
 CONFIG_FILE="$SCRIPT_DIR/config.json"
 
 if [ -f "$CONFIG_FILE" ]; then
@@ -156,7 +179,7 @@ fi
 echo ""
 
 # Deployment target for update.sh
-echo -e "${YELLOW}[7/8] Deployment Target${NC}"
+echo -e "${YELLOW}[8/9] Deployment Target${NC}"
 echo "What should update.sh pull when you run it later?"
 echo "  1) Always use the latest commit (main branch)"
 echo "  2) Pin to a specific tag"
@@ -185,7 +208,7 @@ echo -e "   Change later with: ${BLUE}bash update.sh --tag v1.x${NC}  or  ${BLUE
 echo ""
 
 # Setup systemd service (optional)
-echo -e "${YELLOW}[8/8] Systemd Service Setup${NC}"
+echo -e "${YELLOW}[9/9] Systemd Service Setup${NC}"
 echo "Do you want to set up the systemd service?"
 echo "(This will allow the app to start automatically on boot)"
 read -p "Setup systemd service? [y/N]: " setup_service
