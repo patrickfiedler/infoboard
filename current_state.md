@@ -1,6 +1,6 @@
 # Current State
 
-**Branch:** main — deploy.sh now checks font packages on Debian/Ubuntu (new step 3/9), about to commit. Prior latest: `fdc2b60` (carlito/caladea docs)
+**Branch:** main — clean, all pushed. Latest: `a899083` (deploy.sh font package check)
 **Status:** Stable. No open bugs, no open PRs. v1.0, v2.0, v2.1 GitHub releases published (v2.1: https://github.com/patrickfiedler/infoboard/releases/tag/v2.1 — kiosk CPU fix, auto-reload, admin UX polish; no migration). Progress bar / auto-reload work confirmed working on Pi 5 kiosk hardware by user.
 
 ## Next steps
