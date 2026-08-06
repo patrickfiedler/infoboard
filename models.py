@@ -99,16 +99,6 @@ def init_db():
             )
         ''')
 
-        # Migrate: add spread_mode to playlist tables if upgrading
-        try:
-            conn.execute("ALTER TABLE playlist_items ADD COLUMN spread_mode TEXT NOT NULL DEFAULT 'none'")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE zone_playlist_items ADD COLUMN spread_mode TEXT NOT NULL DEFAULT 'none'")
-        except Exception:
-            pass
-
         conn.execute('''
             CREATE TABLE IF NOT EXISTS gallery_images (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,6 +142,16 @@ def init_db():
                 FOREIGN KEY (zone_id) REFERENCES zones(id)
             )
         ''')
+
+        # Migrate: add spread_mode to playlist tables if upgrading
+        try:
+            conn.execute("ALTER TABLE playlist_items ADD COLUMN spread_mode TEXT NOT NULL DEFAULT 'none'")
+        except Exception:
+            pass  # Column already exists
+        try:
+            conn.execute("ALTER TABLE zone_playlist_items ADD COLUMN spread_mode TEXT NOT NULL DEFAULT 'none'")
+        except Exception:
+            pass  # Column already exists
 
         # Global settings (auto-cleanup only; display settings live in displays table)
         conn.execute('''
