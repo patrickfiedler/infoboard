@@ -65,6 +65,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for systemd service setup and update procedur
 - Python 3.8+
 - `poppler-utils` for PDF rendering: `apt install poppler-utils`
 - `ttf-mscorefonts-installer` recommended: `apt install ttf-mscorefonts-installer` — without it, PDFs using non-embedded Arial/Times New Roman/etc. render with a substitute font that can look visibly different from other PDF viewers
+- `fonts-crosextra-carlito` and `fonts-crosextra-caladea` recommended: `apt install fonts-crosextra-carlito fonts-crosextra-caladea` — metric-compatible substitutes for non-embedded Calibri/Cambria (not covered by mscorefonts)
 
 ## Configuration
 

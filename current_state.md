@@ -1,6 +1,6 @@
 # Current State
 
-**Branch:** main — README.md/DEPLOYMENT.md/todo.md/current_state.md updated (mscorefonts fix), about to commit. Prior latest: `9aa2f16` (countdown 1Hz tick)
+**Branch:** main — README.md/DEPLOYMENT.md/todo.md/current_state.md updated (mscorefonts + carlito/caladea font fix), about to commit. Prior latest: `9aa2f16` (countdown 1Hz tick)
 **Status:** Stable. No open bugs, no open PRs. v1.0, v2.0, v2.1 GitHub releases published (v2.1: https://github.com/patrickfiedler/infoboard/releases/tag/v2.1 — kiosk CPU fix, auto-reload, admin UX polish; no migration). Progress bar / auto-reload work confirmed working on Pi 5 kiosk hardware by user.
 
 ## Next steps

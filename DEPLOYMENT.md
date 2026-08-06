@@ -44,15 +44,17 @@ sudo dnf install python3 python3-pip git poppler-utils
 
 ### Font Rendering (Recommended)
 
-Infoboard pre-renders PDFs with `pdftoppm` (poppler), which substitutes a local font for any font not embedded in the PDF. Many Office-generated PDFs don't embed common fonts like Arial or Times New Roman, so without the real fonts installed, poppler falls back to a metric-compatible clone (e.g. Liberation Sans) that can look subtly different from how the PDF renders elsewhere (e.g. a browser's pdf.js viewer on Windows, which has real Arial).
+Infoboard pre-renders PDFs with `pdftoppm` (poppler), which substitutes a local font for any font not embedded in the PDF. Many Office-generated PDFs don't embed common fonts like Arial, Times New Roman, or Calibri, so without the real (or metric-compatible) fonts installed, poppler falls back to a generic substitute (e.g. DejaVu Sans) that can look visibly different from how the PDF renders elsewhere (e.g. a browser's pdf.js viewer on Windows, which has the real fonts).
 
-Install the real Microsoft core fonts to avoid this:
+Install the real Microsoft core fonts plus metric-compatible clones for Calibri/Cambria (not covered by mscorefonts):
 
-**Debian/Ubuntu** (package is in `contrib`/`multiverse`):
+**Debian/Ubuntu** (`ttf-mscorefonts-installer` is in `contrib`/`multiverse`):
 ```bash
-sudo apt install ttf-mscorefonts-installer
+sudo apt install ttf-mscorefonts-installer fonts-crosextra-carlito fonts-crosextra-caladea
 fc-cache -f -v
 ```
+
+`fonts-crosextra-carlito`/`fonts-crosextra-caladea` are open metric-compatible clones of Calibri/Cambria — Debian/Ubuntu's fontconfig auto-substitutes Calibri → Carlito and Cambria → Caladea once installed, no extra config needed. Other Office fonts (Segoe UI, Corbel, Candara, Constantia) have no packaged open equivalent — if one of those shows up non-embedded, the source document needs the font embedded at export time instead.
 
 After installing, re-render any already-uploaded PDFs (re-upload or trigger a re-render) for the fix to take effect.
 
