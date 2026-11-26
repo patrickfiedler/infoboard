@@ -12,9 +12,9 @@ Self-hosted digital signage that runs in any modern browser. No dedicated player
 - **PDF spread view** — side-by-side page pairs (book/magazine layout), configurable per playlist item
 - **Image galleries** — batch upload, sortable, shown as slideshow
 - **Website proxy** — embeds external pages by stripping X-Frame-Options/CSP headers
-- **Admin panel** — upload, rename, delete media; manage playlists; collapsible per-display settings and weekday schedule drawers; layout previews
-- **Multi-user support** — create additional user accounts (`Benutzer` tab) with isolated media libraries and playlists; users only see and manage their own uploads and permitted zones
-- **Weekday scheduling & zone permissions** — assign weekdays (Monday–Sunday) per display to specific users and grant per-zone checkboxes matching the active layout; unpermitted zones and empty user playlists automatically fall back to the administrator's content
+- **Admin panel** — upload, rename, delete media; manage playlists; collapsible per-display settings; layout previews
+- **Multi-user support** — extra accounts (`Benutzer` tab) get access to a whole display or single zones. All users of an area share its playlist; everyone adds, changes and deletes only their own files and entries (the admin can change everything)
+- **Weekdays** — each playlist entry can be limited to certain weekdays (server local time)
 - **Authentication** — admin account (`config.json`) and database user accounts with bcrypt-hashed passwords
 - **Auto-updating display** — polls for changes every 10 seconds; content, layout changes and new app versions are picked up without a manual refresh
 - **Progress indicator** — per display: progress bar, subtle bar, countdown (default, lowest CPU use) or none
@@ -130,7 +130,8 @@ infoboard/
 - Proxied websites run sandboxed, so their scripts cannot act as the logged-in admin; sites that need cookies or browser storage may not display correctly
 - Uploaded files stored with UUID filenames (prevents path traversal)
 - Session management via Flask-Login with role-based access control (`@admin_required` for system/display/user management)
-- Per-user media and playlist isolation enforced on all routes and database queries
+- Access to playlists and ownership of files and entries are checked on the server
+- Users can add websites, which the server fetches; only give accounts to people you trust with access to your local network
 
 ## Updating
 

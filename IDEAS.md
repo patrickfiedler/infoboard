@@ -29,4 +29,4 @@ Diese Datei sammelt Ideen, Erweiterungswünsche und Konzepte für die Weiterentw
 - [x] Bereich „Neues Display hinzufügen“ hinter einem Button verborgen (`templates/admin.html`)
 - [x] Größe der Render-Voransicht pro Display verdoppelt (`240 × 136 px`)
 - [x] Normale Vollbild-Playlist bei aktivem Mehr-Zonen-Layout in der Admin-Oberfläche ausgeblendet und Rückkehr zum Vollbild im Backend abgesichert (`app.py`, `templates/admin.html`)
-- [x] Mehrbenutzer-System mit isolierten Medienbibliotheken, Zonen-Freigaben per Checkbox und Wochentags-Planung pro Display (`migrations/0006_multi_user.py`, `models.py`, `app.py`, `templates/admin.html`)
+- [x] Mehrbenutzer-System mit eigenen Medienbibliotheken, gemeinsamen Playlists, Zugriff pro Display oder Zone und Wochentagen pro Playlist-Eintrag (`models.py`, `app.py`, `templates/admin.html`)

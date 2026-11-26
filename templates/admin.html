@@ -152,9 +152,12 @@
         }
         .card-col-playlist h3 { font-size: 13px; font-weight: 600; color: #888; text-transform: uppercase;
                                 letter-spacing: 0.05em; margin-bottom: 12px; }
-        .toggle-settings-btn.active, .toggle-schedule-btn.active { background: #495057; }
+        .toggle-settings-btn.active { background: #495057; }
+        .entry-owner { font-size: 11px; color: #888; margin-left: 6px; }
+        .weekdays { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 5px; }
+        .weekdays label { display: inline-flex; align-items: center; gap: 3px; margin: 0; font-size: 11px; font-weight: 400; color: #777; }
 
-        /* User & schedule cards */
+        /* User cards */
         .user-card { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
         .user-card-header { padding: 14px 16px; background: #f8f9fa; display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid #eee; flex-wrap: wrap; }
         .user-card-body { padding: 16px; background: #fff; }
@@ -164,10 +167,6 @@
         .checkbox-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #444; cursor: pointer; font-weight: 500; margin-bottom: 0; background: #fff; padding: 5px 10px; border: 1px solid #ddd; border-radius: 5px; }
         .checkbox-pill input[type="checkbox"] { width: auto; margin: 0; }
         .checkbox-pill .hint { font-size: 11px; color: #999; font-weight: 400; }
-        .schedule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-bottom: 12px; }
-        .schedule-day-row { background: #fff; border: 1px solid #e1e4e8; border-radius: 5px; padding: 8px 10px; }
-        .schedule-day-row.is-today { border-color: #667eea; background: #f5f7ff; }
-
         /* Display card status bar */
         .display-card-status {
             padding: 8px 16px;
@@ -263,7 +262,8 @@
 </head>
 <body>
 <div class="container">
-    {% set type_labels = {'pdf': 'PDF', 'image': 'Bild', 'video': 'Video', 'youtube': 'YouTube', 'url': 'Website', 'gallery': 'Galerie'} %}
+    {% from '_playlist_row.html' import playlist_row, type_labels %}
+    {% set show_owner = users|length > 0 %}
 
     <header>
         <h1>{{ 'Infoboard Verwaltung' if is_admin else 'Infoboard – ' ~ current_user.display_name }}</h1>
@@ -298,32 +298,14 @@
             {% endif %}
         </div>
 
-        {% if is_admin and users %}
-        <div class="form-bg" style="padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-            <div style="font-size: 13px; color: #555;">
-                <strong>Playlist-Ansicht:</strong>
-                {% if view_user_id == 0 %}
-                    Administrator (Standard &amp; Fallback)
-                {% else %}
-                    Inhalte von <strong>{{ users_by_id[view_user_id].display_name }}</strong>
-                {% endif %}
-            </div>
-            <form method="GET" action="{{ url_for('admin') }}" style="display: flex; align-items: center; gap: 8px;">
-                <label for="view-user-select" style="margin: 0; white-space: nowrap;">Playlists bearbeiten für:</label>
-                <select id="view-user-select" name="view_user" onchange="this.form.submit()" style="width: auto; padding: 6px 10px; font-size: 13px;">
-                    <option value="0" {% if view_user_id == 0 %}selected{% endif %}>Administrator (Standard &amp; Fallback)</option>
-                    {% for u in users %}
-                    <option value="{{ u.id }}" {% if view_user_id == u.id %}selected{% endif %}>{{ u.display_name }} (@{{ u.username }})</option>
-                    {% endfor %}
-                </select>
-            </form>
-        </div>
+        {% if not displays %}
+        <p style="color:#999;">Ihnen wurde noch kein Display freigegeben. Bitte wenden Sie sich an den Administrator.</p>
         {% endif %}
 
         <div class="display-cards">
             {% for d in displays %}
-            {% set permitted_zones = target_zone_perms.get(d.id, []) %}
-            {% set sched = display_schedules.get(d.id, {}) %}
+            {% set permitted_zones = editable_zones[d.id] %}
+            {% set is_multizone = d.layout_preset and d.layout_preset != 'fullscreen' %}
             <div class="display-card">
                 <div class="display-card-header">
                     <div>
@@ -337,13 +319,11 @@
                     <div class="actions">
                         <button type="button" class="btn-sm btn-secondary toggle-settings-btn" id="btn-toggle-settings-{{ d.id }}"
                                 onclick="toggleDisplaySettings({{ d.id }})">⚙ Einstellungen ▾</button>
-                        <button type="button" class="btn-sm btn-secondary toggle-schedule-btn" id="btn-toggle-schedule-{{ d.id }}"
-                                onclick="toggleDisplaySchedule({{ d.id }})">📅 Wochenplan ▾</button>
                         <form method="POST" action="{{ url_for('regenerate_renders', display_id=d.id) }}"
                               data-confirm="Alle PDFs für dieses Display neu rendern?">
                             <button type="submit" class="btn-sm btn-secondary">PDFs neu rendern</button>
                         </form>
-                        {% if displays|length > 1 %}
+                        {% if all_displays|length > 1 %}
                         <form method="POST" action="{{ url_for('delete_display_route', display_id=d.id) }}"
                               data-confirm="Display &quot;{{ d.name }}&quot; wirklich löschen?">
                             <button type="submit" class="btn-sm btn-danger">Löschen</button>
@@ -356,12 +336,8 @@
                     <div class="display-preview">
                         {% for geo in preset_info.preview %}
                             {% set zi = loop.index0 %}
-                            {% set zone_allowed = (zi in permitted_zones) %}
                             {% set zone_obj = d_zones | selectattr('zone_index', 'equalto', zi) | first | default(none) %}
-                            {% if not zone_allowed %}
-                                {% set thumb = none %}
-                                {% set first_ct = none %}
-                            {% elif zone_obj %}
+                            {% if is_multizone and zone_obj %}
                                 {% set thumb = zone_thumbnails.get(zone_obj.id) %}
                                 {% set zpl = zone_playlists.get(zone_obj.id, []) %}
                                 {% set first_ct = zpl[0].content_type if zpl else none %}
@@ -374,9 +350,7 @@
                                 {% set first_ct = none %}
                             {% endif %}
                             <div class="pz" style="top:{{ geo.top }};left:{{ geo.left }};width:{{ geo.width }};height:{{ geo.height }};">
-                                {% if not zone_allowed %}
-                                    <div class="pz-empty" style="background:#cfd4da;color:#666;font-size:10px;font-weight:600;">Admin</div>
-                                {% elif thumb %}
+                                {% if thumb %}
                                     <img src="{{ thumb }}" alt="">
                                 {% else %}
                                     <div class="pz-empty">
@@ -390,39 +364,19 @@
                     </div>
                 </div>
 
-                {% set is_multizone = d.layout_preset and d.layout_preset != 'fullscreen' %}
                 {% set pl = display_playlists.get(d.id, []) %}
                 <div class="display-card-status">
-                    {% if is_admin %}
-                        {% if is_multizone %}
-                            {% set zones = display_zones.get(d.id, []) %}
-                            <span class="status-dot mode-playlist"></span>
-                            <span class="status-label">Layout:</span>
-                            <span class="status-name">{{ layout_presets.get(d.layout_preset, {}).label }} ({{ zones|length }} Zonen)</span>
-                        {% elif pl %}
-                            <span class="status-dot mode-playlist"></span>
-                            <span class="status-label">Playlist:</span>
-                            <span class="status-name">{{ pl|length }} {{ 'Eintrag' if pl|length == 1 else 'Einträge' }}</span>
-                        {% else %}
-                            <span class="status-dot"></span>
-                            <span class="status-label">{{ 'Admin-Fallback aktiv' if target_user_id > 0 else 'Neueste automatisch' }}</span>
-                        {% endif %}
-                        {% set today_uid = sched.get(today_weekday, 0) %}
-                        <span style="margin-left: auto; font-size: 12px; color: #555;">
-                            Heute ({{ weekdays[today_weekday] }}):
-                            <strong>{{ users_by_id[today_uid].display_name if today_uid in users_by_id else 'Administrator (Standard)' }}</strong>
-                        </span>
+                    {% if is_multizone %}
+                        <span class="status-dot mode-playlist"></span>
+                        <span class="status-label">Layout:</span>
+                        <span class="status-name">{{ layout_presets.get(d.layout_preset, {}).label }} ({{ display_zones.get(d.id, [])|length }} Zonen)</span>
+                    {% elif pl %}
+                        <span class="status-dot mode-playlist"></span>
+                        <span class="status-label">Playlist:</span>
+                        <span class="status-name">{{ pl|length }} {{ 'Eintrag' if pl|length == 1 else 'Einträge' }}</span>
                     {% else %}
-                        {% set my_days = user_display_weekdays.get(d.id, []) %}
-                        <span class="status-dot {{ 'mode-playlist' if my_days else '' }}"></span>
-                        <span class="status-label">Ihre Anzeigezeiten:</span>
-                        <span class="status-name">
-                            {% if my_days %}
-                                {% for wd in my_days %}{{ weekdays[wd] }}{% if not loop.last %}, {% endif %}{% endfor %}
-                            {% else %}
-                                Aktuell keine Wochentage zugewiesen
-                            {% endif %}
-                        </span>
+                        <span class="status-dot"></span>
+                        <span class="status-label">Neueste automatisch</span>
                     {% endif %}
                 </div>
 
@@ -499,119 +453,54 @@
                     </form>
                 </div>
 
-                <!-- Schedule drawer (hidden by default) -->
-                <div class="display-settings-drawer" id="display-schedule-{{ d.id }}" style="display: none;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <h3 style="margin-bottom:0;">Wochenplan für „{{ d.name }}“</h3>
-                        <button type="button" class="btn-sm btn-secondary" onclick="toggleDisplaySchedule({{ d.id }})" style="padding: 2px 8px; font-size: 11px;">✕ Schließen</button>
-                    </div>
-                    <form method="POST" action="{{ url_for('update_display_schedule_route', display_id=d.id) }}">
-                        <div class="schedule-grid">
-                            {% for wd in range(7) %}
-                            {% set assigned_uid = sched.get(wd, 0) %}
-                            <div class="schedule-day-row {{ 'is-today' if wd == today_weekday else '' }}">
-                                <label style="margin-bottom: 4px; font-weight: 600;">
-                                    {{ weekdays[wd] }}{% if wd == today_weekday %} <span style="color:#667eea;font-size:11px;">(Heute)</span>{% endif %}
-                                </label>
-                                <select name="weekday_{{ wd }}" style="padding: 6px 8px; font-size: 13px;">
-                                    <option value="0" {% if assigned_uid == 0 %}selected{% endif %}>Administrator (Standard)</option>
-                                    {% for u in users %}
-                                    <option value="{{ u.id }}" {% if assigned_uid == u.id %}selected{% endif %}>{{ u.display_name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <button type="submit" class="btn-success">Wochenplan speichern</button>
-                            <small style="color:#888;">Nicht freigegebene Zonen und leere Nutzer-Playlists werden automatisch vom Administrator bespielt.</small>
-                        </div>
-                    </form>
-                </div>
                 {% endif %}
 
                 {% if not is_multizone %}
-                {% if 0 in permitted_zones %}
-                <!-- Playlist column (Vollbild) -->
-                <div class="card-col-playlist">
-                        <h3>Playlist</h3>
-                        {% if not pl %}
-                        <p style="color:#999;font-size:13px;margin-bottom:12px;" class="playlist-empty-{{ d.id }}">
-                            {{ 'Leer — an Ihren Tagen wird automatisch der Administrator-Standard angezeigt.' if target_user_id > 0 else 'Leer — neuester Inhalt wird automatisch angezeigt.' }}
-                        </p>
-                        {% endif %}
-                        <table class="playlist-table" {% if not pl %}style="display:none;"{% endif %}>
-                            <tbody class="playlist-sortable" data-display="{{ d.id }}">
-                            {% for pi in pl %}
-                            <tr data-id="{{ pi.id }}">
-                                <td class="drag-handle">☰</td>
-                                <td>
-                                    <span class="badge badge-{{ pi.content_type }}" style="font-size:10px;">{{ type_labels.get(pi.content_type, pi.content_type) }}</span>
-                                    {{ pi.original_name }}
-                                </td>
-                                <td class="dur-cell">
-                                    <input type="number" class="dur-input" data-display="{{ d.id }}" data-item="{{ pi.id }}"
-                                           value="{{ pi.duration }}" min="1">
-                                    <span style="font-size:12px;color:#999;">s</span>
-                                    {% if pi.content_type == 'pdf' %}
-                                        {% set page_count = pdf_page_counts.get(d.id, {}).get(pi.media_id, 0) %}
-                                        {% if page_count > 1 %}
-                                        <span class="per-unit-info" data-count="{{ page_count }}" data-plural="Seiten" data-singular="Seite" style="font-size:11px;color:#aaa;display:block;">{{ page_count }} Seiten · ~{{ (pi.duration // page_count) }}s/Seite</span>
-                                        {% endif %}
-                                        <select class="spread-select" data-display="{{ d.id }}" data-item="{{ pi.id }}"
-                                                style="font-size:11px;margin-top:4px;width:auto;">
-                                            <option value="none"   {% if pi.spread_mode == 'none'   %}selected{% endif %}>Einzelseiten</option>
-                                            <option value="paired" {% if pi.spread_mode == 'paired' %}selected{% endif %}>Doppelseiten (1+2, 3+4…)</option>
-                                            <option value="book"   {% if pi.spread_mode == 'book'   %}selected{% endif %}>Buchansicht (1, 2+3…)</option>
-                                        </select>
-                                    {% elif pi.content_type == 'gallery' %}
-                                        {% set img_count = gallery_image_counts.get(pi.media_id, 0) %}
-                                        {% if img_count > 0 %}
-                                        <span class="per-unit-info" data-count="{{ img_count }}" data-plural="Bilder" data-singular="Bild" style="font-size:11px;color:#aaa;display:block;">{{ img_count }} Bilder · ~{{ (pi.duration // img_count) }}s/Bild</span>
-                                        {% endif %}
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <button class="btn btn-sm btn-danger remove-item"
-                                            data-display="{{ d.id }}" data-item="{{ pi.id }}">✕</button>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                            </tbody>
-                        </table>
-                        <form class="playlist-add-form" data-display="{{ d.id }}" style="margin-top:8px;">
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Inhalt</label>
-                                    <select name="media_id" required>
-                                        {% for item in all_media %}
-                                        <option value="{{ item.id }}">{{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="form-group form-group-sm">
-                                    <label>Dauer (s)</label>
-                                    <input type="number" name="duration" value="{{ d.cycle_interval }}" min="1" required>
-                                </div>
-                                <div>
-                                    <label>&nbsp;</label>
-                                    <button type="submit">Hinzufügen</button>
-                                </div>
+                <div class="card-col-playlist playlist-block">
+                    <h3>Playlist</h3>
+                    {% if not pl %}
+                    <p style="color:#999;font-size:13px;margin-bottom:12px;" class="playlist-empty">Leer — neuester Inhalt wird automatisch angezeigt.</p>
+                    {% endif %}
+                    <table class="playlist-table" {% if not pl %}style="display:none;"{% endif %}>
+                        <tbody class="playlist-sortable" data-kind="display" data-owner="{{ d.id }}">
+                        {% for pi in pl %}
+                            {{ playlist_row(pi, pdf_page_counts[d.id].get(pi.media_id, 0), gallery_image_counts.get(pi.media_id, 0),
+                                            is_admin or pi.owner_id == current_user.db_id, show_owner, weekdays_short) }}
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    {% if own_media %}
+                    <form class="playlist-add-form" style="margin-top:8px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Inhalt</label>
+                                <select name="media_id" required>
+                                    {% for item in own_media %}
+                                    <option value="{{ item.id }}">{{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})</option>
+                                    {% endfor %}
+                                </select>
                             </div>
-                        </form>
-                    </div>
-                {% else %}
-                <div class="card-col-playlist" style="background:#fafafa;padding:14px 16px;color:#777;font-size:13px;border-top:1px solid #eee;">
-                    🔒 <strong>Vollbild-Bereich:</strong> Dieser Bereich wird vom Administrator verwaltet.
+                            <div class="form-group form-group-sm">
+                                <label>Dauer (s)</label>
+                                <input type="number" name="duration" value="{{ d.cycle_interval }}" min="1" required>
+                            </div>
+                            <div>
+                                <label>&nbsp;</label>
+                                <button type="submit">Hinzufügen</button>
+                            </div>
+                        </div>
+                    </form>
+                    {% else %}
+                    <p style="color:#999;font-size:13px;">Laden Sie zuerst im Tab „Inhalte“ eine Datei hoch.</p>
+                    {% endif %}
                 </div>
-                {% endif %}
                 {% else %}
                 <div class="card-col-playlist" style="background:#fdfdfe;padding:14px 16px;border-top:1px solid #eee;">
                     <div style="display:flex;align-items:center;gap:10px;color:#495057;font-size:13px;background:#f0f4ff;padding:11px 14px;border-radius:6px;border:1px solid #dbe4ff;">
                         <span style="font-size:18px;line-height:1;">ℹ️</span>
                         <div>
                             <strong>Mehr-Zonen-Layout aktiv ({{ layout_presets.get(d.layout_preset, {}).label }}):</strong><br>
-                            Die Inhalte dieses Displays werden über die Zonen-Playlists unten gesteuert.{% if is_admin %} Die Vollbild-Playlist pausiert.{% endif %}
+                            Die Inhalte dieses Displays werden über die Zonen-Playlists unten gesteuert. Die Vollbild-Playlist pausiert.
                         </div>
                     </div>
                 </div>
@@ -625,60 +514,28 @@
                     {% set zone_label = preset_info.zone_labels[zone.zone_index] if zone.zone_index < (preset_info.zone_labels|length) else ('Zone ' ~ (zone.zone_index + 1)) %}
                     {% if zone.zone_index in permitted_zones %}
                     {% set zpl = zone_playlists.get(zone.id, []) %}
-                    <div class="zone-panel" style="border-bottom:1px solid #f0f0f0;padding:12px 16px;">
+                    <div class="zone-panel playlist-block" style="border-bottom:1px solid #f0f0f0;padding:12px 16px;">
                         <div style="font-size:13px;font-weight:700;color:#667eea;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">
                             Zone {{ zone.zone_index + 1 }}: {{ zone_label }}
                         </div>
                         {% if not zpl %}
-                        <p style="color:#999;font-size:13px;margin-bottom:12px;" class="zone-playlist-empty-{{ zone.id }}">
-                            {{ 'Leer — an Ihren Tagen wird automatisch der Administrator-Standard angezeigt.' if target_user_id > 0 else 'Leer — neuester Inhalt wird automatisch angezeigt.' }}
-                        </p>
+                        <p style="color:#999;font-size:13px;margin-bottom:12px;" class="playlist-empty">Leer — neuester Inhalt wird automatisch angezeigt.</p>
                         {% endif %}
                         <table class="playlist-table" {% if not zpl %}style="display:none;"{% endif %}>
-                            <tbody class="zone-playlist-sortable" data-zone="{{ zone.id }}">
+                            <tbody class="playlist-sortable" data-kind="zone" data-owner="{{ zone.id }}">
                             {% for pi in zpl %}
-                            <tr data-id="{{ pi.id }}">
-                                <td class="drag-handle">☰</td>
-                                <td>
-                                    <span class="badge badge-{{ pi.content_type }}" style="font-size:10px;">{{ type_labels.get(pi.content_type, pi.content_type) }}</span>
-                                    {{ pi.original_name }}
-                                </td>
-                                <td class="dur-cell">
-                                    <input type="number" class="dur-input zone-dur-input" data-zone="{{ zone.id }}" data-item="{{ pi.id }}"
-                                           value="{{ pi.duration }}" min="1">
-                                    <span style="font-size:12px;color:#999;">s</span>
-                                    {% if pi.content_type == 'pdf' %}
-                                        {% set page_count = pdf_page_counts.get(d.id, {}).get(pi.media_id, 0) %}
-                                        {% if page_count > 1 %}
-                                        <span class="per-unit-info" data-count="{{ page_count }}" data-plural="Seiten" data-singular="Seite" style="font-size:11px;color:#aaa;display:block;">{{ page_count }} Seiten · ~{{ (pi.duration // page_count) }}s/Seite</span>
-                                        {% endif %}
-                                        <select class="zone-spread-select" data-zone="{{ zone.id }}" data-item="{{ pi.id }}"
-                                                style="font-size:11px;margin-top:4px;width:auto;">
-                                            <option value="none"   {% if pi.spread_mode == 'none'   %}selected{% endif %}>Einzelseiten</option>
-                                            <option value="paired" {% if pi.spread_mode == 'paired' %}selected{% endif %}>Doppelseiten (1+2, 3+4…)</option>
-                                            <option value="book"   {% if pi.spread_mode == 'book'   %}selected{% endif %}>Buchansicht (1, 2+3…)</option>
-                                        </select>
-                                    {% elif pi.content_type == 'gallery' %}
-                                        {% set img_count = gallery_image_counts.get(pi.media_id, 0) %}
-                                        {% if img_count > 0 %}
-                                        <span class="per-unit-info" data-count="{{ img_count }}" data-plural="Bilder" data-singular="Bild" style="font-size:11px;color:#aaa;display:block;">{{ img_count }} Bilder · ~{{ (pi.duration // img_count) }}s/Bild</span>
-                                        {% endif %}
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <button class="btn btn-sm btn-danger zone-remove-item"
-                                            data-zone="{{ zone.id }}" data-item="{{ pi.id }}">✕</button>
-                                </td>
-                            </tr>
+                                {{ playlist_row(pi, pdf_page_counts[d.id].get(pi.media_id, 0), gallery_image_counts.get(pi.media_id, 0),
+                                                is_admin or pi.owner_id == current_user.db_id, show_owner, weekdays_short) }}
                             {% endfor %}
                             </tbody>
                         </table>
-                        <form class="zone-playlist-add-form" data-zone="{{ zone.id }}" style="margin-top:8px;">
+                        {% if own_media %}
+                        <form class="playlist-add-form" style="margin-top:8px;">
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>Inhalt</label>
                                     <select name="media_id" required>
-                                        {% for item in all_media %}
+                                        {% for item in own_media %}
                                         <option value="{{ item.id }}">{{ item.original_name }} ({{ type_labels.get(item.content_type, item.content_type) }})</option>
                                         {% endfor %}
                                     </select>
@@ -693,10 +550,13 @@
                                 </div>
                             </div>
                         </form>
+                        {% else %}
+                        <p style="color:#999;font-size:13px;">Laden Sie zuerst im Tab „Inhalte“ eine Datei hoch.</p>
+                        {% endif %}
                     </div>
                     {% else %}
                     <div class="zone-panel" style="border-bottom:1px solid #f0f0f0;padding:12px 16px;background:#fafafa;color:#888;font-size:13px;">
-                        <strong style="color:#666;">Zone {{ zone.zone_index + 1 }}: {{ zone_label }}</strong> &mdash; 🔒 Wird vom Administrator verwaltet
+                        <strong style="color:#666;">Zone {{ zone.zone_index + 1 }}: {{ zone_label }}</strong> &mdash; 🔒 Kein Zugriff
                     </div>
                     {% endif %}
                     {% endfor %}
@@ -815,7 +675,7 @@
                     <tr>
                         <th>Name</th>
                         <th>Typ</th>
-                        {% if is_admin %}<th>Besitzer</th>{% endif %}
+                        {% if is_admin and show_owner %}<th>Besitzer</th>{% endif %}
                         <th>Datum</th>
                         <th>Größe</th>
                         <th>Aktionen</th>
@@ -843,7 +703,7 @@
                                 {{ type_labels.get(item.content_type, item.content_type) }}
                             </span>
                         </td>
-                        {% if is_admin %}
+                        {% if is_admin and show_owner %}
                         <td style="white-space:nowrap;">
                             <span class="badge" style="background:{{ '#667eea' if item.user_id == 0 else '#6c757d' }};">{{ item.owner_name }}</span>
                         </td>
@@ -885,7 +745,7 @@
                     </tr>
                     {% if item.content_type == 'gallery' %}
                     <tr class="gallery-editor-row" id="gallery-edit-{{ item.id }}" style="display:none;">
-                        <td colspan="{{ 6 if is_admin else 5 }}">
+                        <td colspan="{{ 6 if is_admin and show_owner else 5 }}">
                             {% set gimgs = gallery_images_map.get(item.id, []) %}
                             <table class="gallery-table" {% if not gimgs %}style="display:none;"{% endif %}>
                                 <tbody class="gallery-sortable" data-gallery="{{ item.id }}">
@@ -926,7 +786,7 @@
                     {% endif %}
                     {% if item.content_type == 'url' %}
                     <tr class="yt-opts-row" id="url-opts-{{ item.id }}" style="display:none;">
-                        <td colspan="{{ 6 if is_admin else 5 }}">
+                        <td colspan="{{ 6 if is_admin and show_owner else 5 }}">
                             <form method="POST" action="{{ url_for('url_options', media_id=item.id) }}" class="yt-opts-form">
                                 <label style="flex:1;">
                                     URL:
@@ -941,7 +801,7 @@
                     {% if item.content_type == 'youtube' %}
                     {% set yp = youtube_params.get(item.id, {}) %}
                     <tr class="yt-opts-row" id="yt-opts-{{ item.id }}" style="display:none;">
-                        <td colspan="{{ 6 if is_admin else 5 }}">
+                        <td colspan="{{ 6 if is_admin and show_owner else 5 }}">
                             <form method="POST" action="{{ url_for('youtube_options', media_id=item.id) }}" class="yt-opts-form">
                                 <label>
                                     <input type="checkbox" name="controls" {% if yp.get('controls') %}checked{% endif %}>
@@ -980,15 +840,15 @@
 
             {% if total_pages > 1 %}
             <div class="pagination">
-                {% if page > 1 %}<a href="{{ url_for('admin', page=page-1, view_user=view_user_id if (is_admin and view_user_id) else None) }}">← Zurück</a>{% endif %}
+                {% if page > 1 %}<a href="{{ url_for('admin', page=page-1) }}">← Zurück</a>{% endif %}
                 {% for p in range(1, total_pages + 1) %}
                     {% if p == page %}
                         <span class="current">{{ p }}</span>
                     {% else %}
-                        <a href="{{ url_for('admin', page=p, view_user=view_user_id if (is_admin and view_user_id) else None) }}">{{ p }}</a>
+                        <a href="{{ url_for('admin', page=p) }}">{{ p }}</a>
                     {% endif %}
                 {% endfor %}
-                {% if page < total_pages %}<a href="{{ url_for('admin', page=page+1, view_user=view_user_id if (is_admin and view_user_id) else None) }}">Weiter →</a>{% endif %}
+                {% if page < total_pages %}<a href="{{ url_for('admin', page=page+1) }}">Weiter →</a>{% endif %}
             </div>
             {% endif %}
 
@@ -1082,10 +942,8 @@
                         <span style="font-size:12px; color:#777; margin-left:8px;">@{{ u.username }}</span>
                     </div>
                     <div class="actions">
-                        <a href="{{ url_for('admin', view_user=u.id) }}" class="btn btn-sm btn-info"
-                           onclick="sessionStorage.setItem('adminTab', 'displays');">Playlists öffnen</a>
                         <form method="POST" action="{{ url_for('users_delete', user_id=u.id) }}"
-                              data-confirm="Benutzer &quot;{{ u.display_name }}&quot; wirklich löschen? Alle Inhalte dieses Benutzers werden ebenfalls gelöscht!">
+                              data-confirm="Benutzer &quot;{{ u.display_name }}&quot; wirklich löschen? {{ media_counts.get(u.id, 0) }} Datei(en) dieses Benutzers werden ebenfalls gelöscht und von allen Bildschirmen entfernt!">
                             <button type="submit" class="btn-sm btn-danger">Löschen</button>
                         </form>
                     </div>
@@ -1114,46 +972,34 @@
 
                     <form method="POST" action="{{ url_for('users_access', user_id=u.id) }}">
                         <div style="font-size:13px; font-weight:600; color:#666; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px;">
-                            Bereichs-Freigaben &amp; Wochentage
+                            Zugriff auf Displays
                         </div>
                         {% for d in displays %}
                         {% set preset_key = d.layout_preset or 'fullscreen' %}
                         {% set preset_info = layout_presets.get(preset_key, layout_presets['fullscreen']) %}
-                        {% set u_perms = user_zone_perms.get(u.id, {}).get(d.id, []) %}
-                        {% set sched = display_schedules.get(d.id, {}) %}
+                        {% set u_access = user_access[u.id][d.id] %}
                         <div class="access-display-box">
                             <div class="access-display-title">
                                 {{ d.name }} <span style="font-weight:400; color:#888; font-size:12px;">({{ preset_info.label }})</span>
                             </div>
-                            <div style="margin-bottom: 10px;">
-                                <div style="font-size:12px; color:#666; margin-bottom:6px; font-weight:500;">Freigegebene Bereiche (nicht angehakte Bereiche bleiben beim Administrator):</div>
-                                <div class="checkbox-group">
-                                    {% for zi in range(preset_info.zones) %}
-                                    <label class="checkbox-pill">
-                                        <input type="checkbox" name="zones_{{ d.id }}" value="{{ zi }}" {% if zi in u_perms %}checked{% endif %}>
-                                        {{ preset_info.zone_labels[zi] }}
-                                    </label>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            <div>
-                                <div style="font-size:12px; color:#666; margin-bottom:6px; font-weight:500;">Zugewiesene Wochentage:</div>
-                                <div class="checkbox-group">
-                                    {% for wd in range(7) %}
-                                    {% set day_owner = sched.get(wd, 0) %}
-                                    <label class="checkbox-pill">
-                                        <input type="checkbox" name="weekdays_{{ d.id }}" value="{{ wd }}" {% if day_owner == u.id %}checked{% endif %}>
-                                        {{ weekdays_short[wd] }}
-                                        {% if day_owner != 0 and day_owner != u.id and day_owner in users_by_id %}
-                                        <span class="hint">({{ users_by_id[day_owner].display_name }})</span>
-                                        {% endif %}
-                                    </label>
-                                    {% endfor %}
-                                </div>
+                            <div class="checkbox-group">
+                                <label class="checkbox-pill">
+                                    <input type="checkbox" name="whole_{{ d.id }}" {% if whole_display in u_access %}checked{% endif %}>
+                                    Ganzes Display
+                                </label>
+                                {% if preset_info.zones > 1 %}
+                                <span style="font-size:12px;color:#888;">oder nur:</span>
+                                {% for zi in range(preset_info.zones) %}
+                                <label class="checkbox-pill">
+                                    <input type="checkbox" name="zones_{{ d.id }}" value="{{ zi }}" {% if zi in u_access %}checked{% endif %}>
+                                    {{ preset_info.zone_labels[zi] }}
+                                </label>
+                                {% endfor %}
+                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}
-                        <button type="submit" class="btn-success">Freigaben &amp; Wochentage speichern</button>
+                        <button type="submit" class="btn-success">Zugriff speichern</button>
                     </form>
                 </div>
             </div>
@@ -1169,8 +1015,6 @@
 
 <script src="{{ url_for('static', filename='js/sortable.min.js') }}"></script>
 <script>
-    var TARGET_USER_ID = {{ target_user_id | tojson }};
-
     // Confirm dialogs: <form data-confirm="...">. The text stays plain data, so names
     // containing quotes can never break or inject script.
     document.addEventListener('submit', function(e) {
@@ -1197,7 +1041,7 @@
         }
     })();
 
-    // Generic collapsible display drawer helper (used for settings and schedule)
+    // Collapsible display settings drawer
     function _toggleDrawer(prefix, btnPrefix, labelText, storageKey, id) {
         var panel = document.getElementById(prefix + id);
         var btn = document.getElementById(btnPrefix + id);
@@ -1239,12 +1083,7 @@
     function toggleDisplaySettings(id) {
         _toggleDrawer('display-settings-', 'btn-toggle-settings-', '⚙ Einstellungen', 'openDisplaySettings', id);
     }
-    function toggleDisplaySchedule(id) {
-        _toggleDrawer('display-schedule-', 'btn-toggle-schedule-', '📅 Wochenplan', 'openDisplaySchedules', id);
-    }
-
     _restoreDrawers('display-settings-', 'btn-toggle-settings-', '⚙ Einstellungen', 'openDisplaySettings');
-    _restoreDrawers('display-schedule-', 'btn-toggle-schedule-', '📅 Wochenplan', 'openDisplaySchedules');
 
     // Toggle new display form
     function toggleNewDisplayForm() {
@@ -1300,37 +1139,61 @@
         document.getElementById('cc-lang-label-' + id).style.display = checked ? '' : 'none';
     }
 
-    // Duration auto-save on change (display playlists)
-    document.addEventListener('change', function(e) {
-        if (!e.target.classList.contains('dur-input') || e.target.classList.contains('zone-dur-input')) return;
-        var displayId = e.target.dataset.display;
-        var itemId    = e.target.dataset.item;
-        var duration  = parseInt(e.target.value);
-        if (!duration || duration < 1) return;
-        fetch('/admin/display/' + displayId + '/playlist/item/' + itemId + '/duration', {
+    // === Playlists (display and zone playlists share these handlers) ===
+
+    // POST to the playlist that contains `el`; the tbody names it.
+    function playlistPost(el, path, body) {
+        var tbody = el.closest('.playlist-block').querySelector('.playlist-sortable');
+        return fetch('/admin/' + tbody.dataset.kind + '/' + tbody.dataset.owner + '/playlist/' + path, {
             method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
-            body: 'duration=' + duration + '&user_id=' + TARGET_USER_ID
-        }).then(function(r) { return r.json(); }).then(function(data) {
-            var cell = e.target.closest('.dur-cell');
-            var saved = cell.querySelector('.dur-saved');
-            if (!saved) {
-                saved = document.createElement('span');
-                saved.className = 'dur-saved';
-                saved.style.cssText = 'font-size:11px;display:block;transition:opacity 0.5s;';
-                cell.appendChild(saved);
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+            body: body
+        }).then(function(r) { return r.json(); });
+    }
+
+    function itemPost(el, action, fields) {
+        var id = el.closest('tr').dataset.id;
+        return playlistPost(el, 'item/' + id + '/' + action, new URLSearchParams(fields));
+    }
+
+    function showSaved(el, ok) {
+        var cell = el.closest('td');
+        var saved = cell.querySelector('.dur-saved');
+        if (!saved) {
+            saved = document.createElement('span');
+            saved.className = 'dur-saved';
+            saved.style.cssText = 'font-size:11px;display:block;transition:opacity 0.5s;';
+            cell.appendChild(saved);
+        }
+        saved.style.opacity = '1';
+        saved.style.color = ok ? '#28a745' : '#dc3545';
+        saved.textContent = ok ? 'gespeichert' : 'Fehler';
+        clearTimeout(saved._t);
+        saved._t = setTimeout(function() { saved.style.opacity = '0'; }, 1500);
+    }
+
+    // Auto-save duration, spread mode and weekdays on change
+    document.addEventListener('change', function(e) {
+        var el = e.target;
+        if (el.classList.contains('dur-input')) {
+            var duration = parseInt(el.value);
+            if (!duration || duration < 1) return;
+            itemPost(el, 'duration', {duration: duration}).then(function(data) {
+                showSaved(el, data.ok);
+                if (data.ok) updatePerUnitInfo(el.closest('td'), duration);
+            });
+        } else if (el.classList.contains('spread-select')) {
+            itemPost(el, 'spread', {spread_mode: el.value});
+        } else if (el.classList.contains('weekday-input')) {
+            var days = Array.from(el.closest('.weekdays').querySelectorAll('input:checked'))
+                .map(function(box) { return box.value; }).join('');
+            if (!days) {
+                el.checked = true;
+                alert('Mindestens ein Wochentag muss ausgewählt sein. Zum Ausblenden den Eintrag entfernen.');
+                return;
             }
-            e.target.style.borderColor = data.ok ? '#28a745' : '#dc3545';
-            saved.style.opacity = '1';
-            saved.style.color = data.ok ? '#28a745' : '#dc3545';
-            saved.textContent = data.ok ? 'gespeichert' : 'Fehler';
-            clearTimeout(saved._t);
-            saved._t = setTimeout(function() {
-                e.target.style.borderColor = '';
-                saved.style.opacity = '0';
-            }, 1500);
-            if (data.ok) updatePerUnitInfo(cell, duration);
-        });
+            itemPost(el, 'weekdays', {weekdays: days}).then(function(data) { showSaved(el, data.ok); });
+        }
     });
 
     // Recompute the "N Seiten · ~Xs/Seite" line after a duration change, no reload needed
@@ -1342,104 +1205,53 @@
         info.textContent = count + ' ' + info.dataset.plural + ' · ~' + Math.floor(duration / count) + 's/' + info.dataset.singular;
     }
 
-    // Spread mode auto-save (display playlists)
-    document.addEventListener('change', function(e) {
-        if (!e.target.classList.contains('spread-select')) return;
-        var displayId = e.target.dataset.display;
-        var itemId    = e.target.dataset.item;
-        fetch('/admin/display/' + displayId + '/playlist/item/' + itemId + '/spread', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
-            body: 'spread_mode=' + encodeURIComponent(e.target.value) + '&user_id=' + TARGET_USER_ID
-        });
-    });
+    // Show table or "empty" note depending on whether entries exist
+    function refreshPlaylist(block) {
+        var hasRows = block.querySelector('.playlist-sortable tr') !== null;
+        block.querySelector('.playlist-table').style.display = hasRows ? '' : 'none';
+        var empty = block.querySelector('.playlist-empty');
+        if (empty) empty.style.display = hasRows ? 'none' : '';
+    }
 
-    // Spread mode auto-save (zone playlists)
-    document.addEventListener('change', function(e) {
-        if (!e.target.classList.contains('zone-spread-select')) return;
-        var zoneId = e.target.dataset.zone;
-        var itemId = e.target.dataset.item;
-        fetch('/admin/zone/' + zoneId + '/playlist/item/' + itemId + '/spread', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
-            body: 'spread_mode=' + encodeURIComponent(e.target.value) + '&user_id=' + TARGET_USER_ID
-        });
-    });
-
-    // Remove item
     document.addEventListener('click', function(e) {
         if (!e.target.classList.contains('remove-item')) return;
-        var displayId = e.target.dataset.display;
-        var itemId    = e.target.dataset.item;
-        fetch('/admin/display/' + displayId + '/playlist/item/' + itemId + '/remove', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
-            body: 'user_id=' + TARGET_USER_ID
-        }).then(function(r) { return r.json(); }).then(function(data) {
+        var tr = e.target.closest('tr');
+        var block = tr.closest('.playlist-block');
+        itemPost(e.target, 'remove', {}).then(function(data) {
             if (!data.ok) return;
-            var tr = e.target.closest('tr');
-            var tbody = tr.closest('tbody');
             tr.remove();
-            // Hide table and show empty message if no rows left
-            if (tbody.querySelectorAll('tr').length === 0) {
-                tbody.closest('table').style.display = 'none';
-                var empty = document.querySelector('.playlist-empty-' + displayId);
-                if (empty) empty.style.display = '';
-            }
+            refreshPlaylist(block);
         });
     });
 
-    // SortableJS init
     document.querySelectorAll('.playlist-sortable').forEach(function(tbody) {
         Sortable.create(tbody, {
             handle: '.drag-handle',
             animation: 150,
             onEnd: function() {
-                var displayId = tbody.dataset.display;
                 var ids = Array.from(tbody.querySelectorAll('tr')).map(function(r) { return parseInt(r.dataset.id); });
-                fetch('/admin/display/' + displayId + '/playlist/reorder', {
+                fetch('/admin/' + tbody.dataset.kind + '/' + tbody.dataset.owner + '/playlist/reorder', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
-                    body: JSON.stringify({order: ids, user_id: TARGET_USER_ID})
+                    body: JSON.stringify({order: ids})
                 });
             }
         });
     });
 
-    // Add item via AJAX
+    // Add item via AJAX; the server returns the finished table row
     document.querySelectorAll('.playlist-add-form').forEach(function(form) {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
-            var displayId = form.dataset.display;
-            var data = new FormData(form);
-            data.append('user_id', TARGET_USER_ID);
-            fetch('/admin/display/' + displayId + '/playlist/add', {
-                method: 'POST',
-                headers: {'X-Requested-With': 'XMLHttpRequest'},
-                body: new URLSearchParams(data)
-            }).then(function(r) { return r.json(); }).then(function(item) {
-                if (!item.ok) return;
-                var tbody = document.querySelector('.playlist-sortable[data-display="' + displayId + '"]');
-                tbody.appendChild(buildPlaylistRow(displayId, item));
-                tbody.closest('table').style.display = '';
-                var empty = document.querySelector('.playlist-empty-' + displayId);
-                if (empty) empty.style.display = 'none';
+            playlistPost(form, 'add', new URLSearchParams(new FormData(form))).then(function(data) {
+                if (!data.ok) return;
+                var block = form.closest('.playlist-block');
+                block.querySelector('.playlist-sortable').insertAdjacentHTML('beforeend', data.html);
+                refreshPlaylist(block);
                 form.reset();
-                // Re-init Sortable on the tbody (already init'd, new row is auto-included)
             });
         });
     });
-
-    function buildPlaylistRow(displayId, item) {
-        var tr = document.createElement('tr');
-        tr.dataset.id = item.id;
-        tr.innerHTML =
-            '<td class="drag-handle">☰</td>' +
-            '<td><span class="badge badge-' + item.content_type + '" style="font-size:10px;">' + item.content_type + '</span> ' + escHtml(item.original_name) + '</td>' +
-            '<td class="dur-cell"><input type="number" class="dur-input" data-display="' + displayId + '" data-item="' + item.id + '" value="' + item.duration + '" min="1"> <span style="font-size:12px;color:#999;">s</span></td>' +
-            '<td><button class="btn btn-sm btn-danger remove-item" data-display="' + displayId + '" data-item="' + item.id + '">✕</button></td>';
-        return tr;
-    }
 
     function escHtml(s) {
         return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1548,109 +1360,6 @@
         });
     }
 
-    // === Zone playlist ===
-
-    // Duration auto-save for zone items
-    document.addEventListener('change', function(e) {
-        if (!e.target.classList.contains('zone-dur-input')) return;
-        var zoneId = e.target.dataset.zone;
-        var itemId = e.target.dataset.item;
-        var duration = parseInt(e.target.value);
-        if (!duration || duration < 1) return;
-        fetch('/admin/zone/' + zoneId + '/playlist/item/' + itemId + '/duration', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
-            body: 'duration=' + duration + '&user_id=' + TARGET_USER_ID
-        }).then(function(r) { return r.json(); }).then(function(data) {
-            var cell = e.target.closest('.dur-cell');
-            var saved = cell.querySelector('.dur-saved');
-            if (!saved) {
-                saved = document.createElement('span');
-                saved.className = 'dur-saved';
-                saved.style.cssText = 'font-size:11px;display:block;transition:opacity 0.5s;';
-                cell.appendChild(saved);
-            }
-            e.target.style.borderColor = data.ok ? '#28a745' : '#dc3545';
-            saved.style.opacity = '1';
-            saved.style.color = data.ok ? '#28a745' : '#dc3545';
-            saved.textContent = data.ok ? 'gespeichert' : 'Fehler';
-            clearTimeout(saved._t);
-            saved._t = setTimeout(function() {
-                e.target.style.borderColor = '';
-                saved.style.opacity = '0';
-            }, 1500);
-            if (data.ok) updatePerUnitInfo(cell, duration);
-        });
-    });
-
-    // Remove zone item
-    document.addEventListener('click', function(e) {
-        if (!e.target.classList.contains('zone-remove-item')) return;
-        var zoneId = e.target.dataset.zone;
-        var itemId = e.target.dataset.item;
-        fetch('/admin/zone/' + zoneId + '/playlist/item/' + itemId + '/remove', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
-            body: 'user_id=' + TARGET_USER_ID
-        }).then(function(r) { return r.json(); }).then(function(data) {
-            if (!data.ok) return;
-            var tr = e.target.closest('tr');
-            var tbody = tr.closest('tbody');
-            tr.remove();
-            if (tbody.querySelectorAll('tr').length === 0) {
-                tbody.closest('table').style.display = 'none';
-                var empty = document.querySelector('.zone-playlist-empty-' + zoneId);
-                if (empty) empty.style.display = '';
-            }
-        });
-    });
-
-    // Zone SortableJS init
-    document.querySelectorAll('.zone-playlist-sortable').forEach(function(tbody) {
-        Sortable.create(tbody, {
-            handle: '.drag-handle',
-            animation: 150,
-            onEnd: function() {
-                var zoneId = tbody.dataset.zone;
-                var ids = Array.from(tbody.querySelectorAll('tr')).map(function(r) { return parseInt(r.dataset.id); });
-                fetch('/admin/zone/' + zoneId + '/playlist/reorder', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
-                    body: JSON.stringify({order: ids, user_id: TARGET_USER_ID})
-                });
-            }
-        });
-    });
-
-    // Add item to zone playlist via AJAX
-    document.querySelectorAll('.zone-playlist-add-form').forEach(function(form) {
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            var zoneId = form.dataset.zone;
-            var data = new FormData(form);
-            data.append('user_id', TARGET_USER_ID);
-            fetch('/admin/zone/' + zoneId + '/playlist/add', {
-                method: 'POST',
-                headers: {'X-Requested-With': 'XMLHttpRequest'},
-                body: new URLSearchParams(data)
-            }).then(function(r) { return r.json(); }).then(function(item) {
-                if (!item.ok) return;
-                var tbody = document.querySelector('.zone-playlist-sortable[data-zone="' + zoneId + '"]');
-                var tr = document.createElement('tr');
-                tr.dataset.id = item.id;
-                tr.innerHTML =
-                    '<td class="drag-handle">☰</td>' +
-                    '<td><span class="badge badge-' + item.content_type + '" style="font-size:10px;">' + item.content_type + '</span> ' + escHtml(item.original_name) + '</td>' +
-                    '<td class="dur-cell"><input type="number" class="dur-input zone-dur-input" data-zone="' + zoneId + '" data-item="' + item.id + '" value="' + item.duration + '" min="1"> <span style="font-size:12px;color:#999;">s</span></td>' +
-                    '<td><button class="btn btn-sm btn-danger zone-remove-item" data-zone="' + zoneId + '" data-item="' + item.id + '">✕</button></td>';
-                tbody.appendChild(tr);
-                tbody.closest('table').style.display = '';
-                var empty = document.querySelector('.zone-playlist-empty-' + zoneId);
-                if (empty) empty.style.display = 'none';
-                form.reset();
-            });
-        });
-    });
 </script>
 <script>
 (function() {

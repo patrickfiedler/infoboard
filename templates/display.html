@@ -436,7 +436,15 @@
                         self.currentStateKey   = newKey;
                         self.progressIndicator = newIndicator;
                         var newSlides = self.buildSlides(data);
-                        if (!newSlides.length) { self.showError('Kein Inhalt verfügbar'); return; }
+                        if (!newSlides.length) {
+                            // e.g. nothing scheduled today: remove the previous content
+                            self.slides = [];
+                            self.stopAll();
+                            self.clearAmbientBg();
+                            self.contentEl.innerHTML = '';
+                            self.showError('Kein Inhalt verfügbar');
+                            return;
+                        }
                         self.slides = newSlides;
                         self.startSlide(0);
                     } else if (newIndicator !== self.progressIndicator) {
