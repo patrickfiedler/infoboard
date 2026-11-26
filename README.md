@@ -125,6 +125,7 @@ infoboard/
 
 - Admin password stored as bcrypt hash (cost factor 12)
 - File uploads restricted to allowed extensions
+- Proxied websites run sandboxed, so their scripts cannot act as the logged-in admin; sites that need cookies or browser storage may not display correctly
 - Uploaded files stored with UUID filenames (prevents path traversal)
 - Session management via Flask-Login
 

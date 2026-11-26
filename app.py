@@ -44,6 +44,7 @@ from models import (
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config.secret_key
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # no login cookie on cross-site requests
 app.config['UPLOAD_FOLDER'] = config.upload_folder
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB
 
@@ -639,8 +640,9 @@ def serve_render(display_id, filename):
 
 @app.route('/proxy')
 def proxy():
-    """Fetch a website server-side and strip X-Frame-Options/CSP headers for iframe embedding.
-    Security: only whitelisted URLs (registered url-type media items) are proxied."""
+    """Fetch a website server-side so it can be embedded in an iframe.
+    Security: only whitelisted URLs (registered url-type media items) are proxied,
+    and the page runs sandboxed because it is served from our own address."""
     url = request.args.get('url', '').strip()
     if not url or not url.startswith(('http://', 'https://')):
         abort(400)
@@ -677,29 +679,11 @@ def proxy():
     else:
         content = resp.content
 
-    # Forward headers, stripping hop-by-hop headers (forbidden in WSGI per PEP 3333)
-    # and headers that block iframe embedding or conflict with Flask response handling
-    skip = {
-        # Hop-by-hop (connection-layer, must not be forwarded)
-        'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
-        'te', 'trailers', 'transfer-encoding', 'upgrade',
-        # Proxy-specific
-        'x-frame-options', 'content-encoding', 'content-length',
-    }
-    headers = {}
-    for key, value in resp.headers.items():
-        k = key.lower()
-        if k in skip:
-            continue
-        if k == 'content-security-policy':
-            # Remove frame-ancestors directive only; keep the rest of CSP intact
-            value = re.sub(r'frame-ancestors\s+[^;]*;?\s*', '', value, flags=re.IGNORECASE).strip('; ')
-            if not value:
-                continue
-        headers[key] = value
-    headers['Content-Type'] = ct
-
-    return Response(content, status=resp.status_code, headers=headers)
+    # Forward no upstream headers (X-Frame-Options would block the iframe,
+    # Set-Cookie would write cookies under our origin). The sandbox gives the page
+    # an anonymous origin; adding allow-same-origin would undo that.
+    return Response(content, status=resp.status_code, content_type=ct,
+                    headers={'Content-Security-Policy': 'sandbox allow-scripts'})
 
 
 # ---------- Auth ----------
