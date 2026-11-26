@@ -127,6 +127,7 @@ infoboard/
 
 - Admin and user passwords stored as bcrypt hashes (cost factor 12)
 - File uploads restricted to allowed extensions
+- Proxied websites run sandboxed, so their scripts cannot act as the logged-in admin; sites that need cookies or browser storage may not display correctly
 - Uploaded files stored with UUID filenames (prevents path traversal)
 - Session management via Flask-Login with role-based access control (`@admin_required` for system/display/user management)
 - Per-user media and playlist isolation enforced on all routes and database queries
