@@ -140,7 +140,7 @@ cd /path/to/infoboard
 ./update.sh
 ```
 
-The update script follows the target chosen during `deploy.sh` (stored in `deployment.conf`): either the latest `main`, or a pinned release tag. It creates a backup tag, pulls the code, runs database migrations, updates dependencies and restarts the service.
+The update script follows the target chosen during `deploy.sh` (stored in `deployment.conf`): either the latest `main`, or a pinned release tag. It backs up the database to `backups/` (newest 10 are kept), creates a backup tag, pulls the code, runs database migrations, updates dependencies and restarts the service.
 
 ```bash
 ./update.sh --latest        # follow main

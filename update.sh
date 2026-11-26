@@ -23,6 +23,59 @@ if [ ! -f "$SCRIPT_DIR/config.json" ]; then
     echo -e "${RED}Error: config.json not found. Run deploy.sh first.${NC}"; exit 1
 fi
 
+# ---------- Backup ----------
+BACKUP_DIR="$SCRIPT_DIR/backups"
+KEEP_DB_BACKUPS=10
+BACKUP_TAG=""
+DB_FILE=""
+DB_BACKUP=""
+
+# Copy the database to backups/infoboard-<timestamp>.db. Uses SQLite's backup
+# function, which gives a consistent copy even while the app is running.
+backup_database() {
+    DB_FILE="$SCRIPT_DIR/infoboard.db"
+    [ -f "$DB_FILE" ] || DB_FILE="$SCRIPT_DIR/kundenstopper.db"
+    if [ ! -f "$DB_FILE" ]; then
+        echo "No database yet — nothing to back up."
+        return 0
+    fi
+
+    # The database contains password hashes: keep backups private
+    mkdir -p "$BACKUP_DIR"
+    chmod 700 "$BACKUP_DIR"
+    DB_BACKUP="$BACKUP_DIR/infoboard-$1.db"
+
+    if ! $PYTHON -I -c '
+import sqlite3, sys
+source = sqlite3.connect(sys.argv[1])
+target = sqlite3.connect(sys.argv[2])
+source.backup(target)
+target.close()
+source.close()
+' "$DB_FILE" "$DB_BACKUP"; then
+        rm -f "$DB_BACKUP"
+        echo -e "${RED}Database backup failed — update aborted, nothing was changed.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Database backup: $DB_BACKUP${NC}"
+}
+
+# Delete all but the newest $KEEP_DB_BACKUPS backups (names sort by timestamp)
+prune_database_backups() {
+    ls -1 "$BACKUP_DIR"/infoboard-*.db 2>/dev/null | sort -r | tail -n +$((KEEP_DB_BACKUPS + 1)) |
+        while IFS= read -r old; do rm -f -- "$old"; done
+}
+
+print_rollback() {
+    [ "$USING_SYSTEMD" = true ] && echo "  sudo systemctl stop infoboard"
+    echo "  git -C $SCRIPT_DIR reset --hard $BACKUP_TAG"
+    if [ -n "$DB_BACKUP" ]; then
+        echo "  cp $DB_BACKUP $DB_FILE   # also restore the database (loses later changes)"
+    fi
+    [ "$USING_SYSTEMD" = true ] && echo "  sudo systemctl start infoboard"
+    return 0
+}
+
 # ---------- Parse arguments ----------
 SKIP_SELF_UPDATE=false
 TARGET_TYPE_OVERRIDE=""
@@ -119,6 +172,8 @@ if [ "$BEHIND_COUNT" -eq 0 ]; then
     echo ""
     # Still run migrations and dependency check — they may be pending
     # even when no new commits were pulled (e.g. after a manual git pull).
+    # No pruning here: repeated runs must not push out pre-update backups
+    backup_database "$(date +%Y%m%d-%H%M%S)"
     echo "Running database migrations..."
     cd "$SCRIPT_DIR" && $PYTHON migrate.py
     echo ""
@@ -138,12 +193,14 @@ if [[ ! $do_update =~ ^[Yy]$ ]]; then
 fi
 echo ""
 
-# ---------- [2/5] Backup tag ----------
-echo -e "${YELLOW}[2/5] Creating backup tag...${NC}"
-BACKUP_TAG="backup-$(date +%Y%m%d-%H%M%S)"
+# ---------- [2/5] Backup ----------
+echo -e "${YELLOW}[2/5] Creating backups...${NC}"
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+backup_database "$TIMESTAMP"
+prune_database_backups
+BACKUP_TAG="backup-$TIMESTAMP"
 git -C "$SCRIPT_DIR" tag "$BACKUP_TAG"
-echo -e "${GREEN}✓ Backup tag: $BACKUP_TAG${NC}"
-echo "  Rollback: git reset --hard $BACKUP_TAG && sudo systemctl restart infoboard"
+echo -e "${GREEN}✓ Code backup tag: $BACKUP_TAG${NC}"
 echo ""
 
 # ---------- [3/5] Stop service, pull code ----------
@@ -154,6 +211,9 @@ if [ "$USING_SYSTEMD" = true ]; then
 fi
 
 if [ "$TARGET_TYPE" = tag ]; then
+    # The self-update above left a modified update.sh, which would block the
+    # checkout. Discard it; the checkout brings in the tag's version.
+    git -C "$SCRIPT_DIR" checkout -q HEAD -- update.sh
     git -C "$SCRIPT_DIR" checkout "$TARGET_VALUE"
 else
     CURRENT_BRANCH=$(git -C "$SCRIPT_DIR" symbolic-ref --short HEAD 2>/dev/null || echo DETACHED)
@@ -208,8 +268,7 @@ if [ "$USING_SYSTEMD" = true ]; then
         echo "Logs: sudo journalctl -u infoboard -n 50"
         echo ""
         echo -e "${YELLOW}To rollback:${NC}"
-        echo "  git -C $SCRIPT_DIR reset --hard $BACKUP_TAG"
-        echo "  sudo systemctl restart infoboard"
+        print_rollback
         exit 1
     fi
 else
@@ -225,7 +284,8 @@ echo -e "${GREEN}Update complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "${BLUE}Updated:${NC} ${CURRENT_COMMIT:0:7} → ${NEW_COMMIT:0:7}"
-echo -e "${BLUE}Backup:${NC}  git reset --hard $BACKUP_TAG"
+echo -e "${BLUE}Rollback, if needed:${NC}"
+print_rollback
 echo ""
 echo -e "${BLUE}URLs:${NC}"
 echo "  Admin:   http://localhost:$PORT/admin"

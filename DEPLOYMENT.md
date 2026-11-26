@@ -158,13 +158,14 @@ The `update.sh` script safely updates your installation from GitHub.
 
 3. **Review changes and confirm:**
    - The script shows recent commits
-   - Automatically creates a backup tag
+   - Backs up the database and creates a backup tag
    - Stops the service (if running)
    - Pulls latest code
    - Updates dependencies (if changed)
    - Restarts the service
 
 **What the script does:**
+- ✅ Backs up the database to `backups/` before updating (newest 10 are kept; uploaded files are not included)
 - ✅ Creates automatic backup tag before updating
 - ✅ Shows preview of changes
 - ✅ Stops systemd service gracefully
@@ -180,36 +181,32 @@ The `update.sh` script safely updates your installation from GitHub.
 Infoboard Update Script
 ========================================
 
-[1/6] Creating backup tag...
-✓ Backup tag created: backup-20260108-143022
-  (To rollback: git reset --hard backup-20260108-143022)
-
-[2/6] Fetching updates from GitHub...
+[1/5] Fetching from remote...
 ✓ Fetch complete
 
-Updates available: 3 commit(s)
-
-Recent changes:
+3 new commit(s):
 a1b2c3d Fix PDF rotation issue
 e4f5g6h Add configuration option for cache
 h7i8j9k Update README with new features
 
 Continue with update? [Y/n]: y
 
-[3/6] Stopping service...
-✓ Service stopped
+[2/5] Creating backups...
+✓ Database backup: /path/to/infoboard/backups/infoboard-20260108-143022.db
+✓ Code backup tag: backup-20260108-143022
 
-[4/6] Pulling updates...
-✓ Code updated
+[3/5] Updating code...
+Service stopped.
+✓ Code updated: 1234abc → a1b2c3d
 
-[5/6] Checking dependencies...
+[4/5] Dependencies and database migrations...
 ✓ No dependency changes
 
-[6/6] Starting service...
-✓ Service started successfully
+[5/5] Starting service...
+✓ Service started
 
 ========================================
-Update Complete!
+Update complete!
 ========================================
 ```
 
@@ -225,6 +222,7 @@ If you prefer manual control:
 2. **Create backup:**
    ```bash
    git tag backup-$(date +%Y%m%d-%H%M%S)
+   cp infoboard.db infoboard.db.bak
    ```
 
 3. **Pull updates:**
@@ -346,8 +344,13 @@ git tag | grep backup
 # Stop service
 sudo systemctl stop infoboard
 
-# Reset to backup
+# Reset code to backup
 git reset --hard backup-20260108-143022
+
+# Only if the database is the problem: restore the matching copy.
+# Changes made after the update (uploads, playlists, users) are lost.
+ls backups/
+cp backups/infoboard-20260108-143022.db infoboard.db
 
 # Restart service
 sudo systemctl start infoboard
