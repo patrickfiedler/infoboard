@@ -12,8 +12,10 @@ Self-hosted digital signage that runs in any modern browser. No dedicated player
 - **PDF spread view** — side-by-side page pairs (book/magazine layout), configurable per playlist item
 - **Image galleries** — batch upload, sortable, shown as slideshow
 - **Website proxy** — embeds external pages by stripping X-Frame-Options/CSP headers
-- **Admin panel** — upload, rename, delete media; manage playlists; configure per-display settings
-- **Authentication** — single admin user with bcrypt-hashed password
+- **Admin panel** — upload, rename, delete media; manage playlists; collapsible per-display settings; layout previews
+- **Multi-user support** — extra accounts (`Benutzer` tab) get access to a whole display or single zones. All users of an area share its playlist; everyone adds, changes and deletes only their own files and entries (the admin can change everything)
+- **Weekdays** — each playlist entry can be limited to certain weekdays (server local time)
+- **Authentication** — admin account (`config.json`) and database user accounts with bcrypt-hashed passwords
 - **Auto-updating display** — polls for changes every 10 seconds; content, layout changes and new app versions are picked up without a manual refresh
 - **Progress indicator** — per display: progress bar, subtle bar, countdown (default, lowest CPU use) or none
 
@@ -123,11 +125,13 @@ infoboard/
 
 ## Security Notes
 
-- Admin password stored as bcrypt hash (cost factor 12)
+- Admin and user passwords stored as bcrypt hashes (cost factor 12)
 - File uploads restricted to allowed extensions
 - Proxied websites run sandboxed, so their scripts cannot act as the logged-in admin; sites that need cookies or browser storage may not display correctly
 - Uploaded files stored with UUID filenames (prevents path traversal)
-- Session management via Flask-Login
+- Session management via Flask-Login with role-based access control (`@admin_required` for system/display/user management)
+- Access to playlists and ownership of files and entries are checked on the server
+- Users can add websites, which the server fetches; only give accounts to people you trust with access to your local network
 
 ## Updating
 

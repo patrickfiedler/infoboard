@@ -1,19 +1,20 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI assistants and developers when working with code in this repository.
 
 ## Project Overview
 
-Infoboard is a Flask-based web application for displaying PDF files with automatic page cycling. It's designed for digital signage, displaying menus, announcements, or promotional materials in fullscreen mode.
+Infoboard is a Flask-based digital signage web application designed for Raspberry Pi kiosk displays. It supports multiple displays, multi-zone layouts (up to 4 zones), per-zone playlists, multiple media types (PDF, image, image gallery, local video, YouTube embed, proxied website), multi-user editing with shared playlists, and per-entry weekdays.
 
 ## Technology Stack
 
-- **Backend**: Flask 3.0 (Python web framework)
+- **Backend**: Flask 3 (Python web framework)
 - **WSGI Server**: Waitress 3.0 (production server)
 - **Authentication**: Flask-Login 0.6.3 with bcrypt 4.1.2
-- **Database**: SQLite (metadata and settings)
-- **PDF Rendering**: pdftoppm (poppler-utils) — pre-renders PDFs to images server-side, stored in `renders/<display_id>/`
-- **Storage**: Local filesystem
+- **Database**: SQLite (`infoboard.db`, managed via `models.py` and `migrations/`)
+- **PDF Rendering**: `pdftoppm` (`poppler-utils`) + Pillow for spread stitching — pre-renders PDFs server-side into `renders/<display_id>/`
+- **Frontend**: Vanilla JS + SortableJS (`static/js/sortable.min.js`)
+- **Storage**: Local filesystem (`uploads/`, `renders/`)
 
 ## Common Commands
 
@@ -31,170 +32,127 @@ cp config.json.example config.json
 # Then edit config.json with your settings
 ```
 
-### Running the Application
+### Running and Migrating
 
 ```bash
+# Apply pending database migrations
+python3 migrate.py
+
 # Start production server with Waitress
 python3 app.py
 
-# The app will display URLs:
-# Display: http://localhost:8080/display
-# Admin: http://localhost:8080/admin
+# URLs:
+# Display: http://localhost:8080/display/<slug>
+# Admin:   http://localhost:8080/admin
 ```
 
-### Database Operations
-
-The database (`infoboard.db`) is automatically created on first run. To reset:
+### Database Reset
 
 ```bash
 rm infoboard.db
-python3 app.py  # Will reinitialize database
+python3 app.py  # Reinitializes database via models.init_db()
 ```
 
 ## Architecture
 
 ### Application Structure
 
-- **app.py**: Main Flask application with all routes and business logic
-  - Routes: `/`, `/display`, `/admin`, `/login`, `/logout`
-  - API: `/api/current-pdf`, `/uploads/<filename>`
-  - Admin actions: upload, rename, delete, select PDFs, update settings
-
-- **models.py**: SQLite database operations
-  - Tables: `pdf_files`, `settings`
-  - Functions for CRUD operations on PDFs and settings
-  - Context manager for database connections
-
-- **config.py**: Configuration management
-  - Loads from `config.json`
-  - Provides typed accessors for settings
+- **`app.py`**: Main Flask application, routes, background PDF rendering, website proxy, authentication, and API endpoints.
+- **`models.py`**: SQLite database schema initialization (`init_db`) and CRUD operations with `get_db()` context manager.
+- **`migrate.py` & `migrations/`**: Numbered migration scripts applied during updates via `./update.sh`. Untracked installations record them as baseline without running them, so schema and data migrations that must always run belong in `init_db()`.
+- **`config.py`**: Loads configuration from `config.json`.
+- **`templates/admin.html`**: Role-aware management UI (displays, playlists, media library, user management). `templates/_playlist_row.html` is the only markup for a playlist row (page and AJAX add).
+- **`templates/display.html`**: Fullscreen kiosk display client polling `/api/display/<slug>/zone/<zi>/current` every 10 seconds.
+- **`templates/login.html`**: Login form for both Administrator and standard users.
 
 ### Key Components
 
-1. **Display View** (`/display`):
-   - Public-facing page that displays PDFs as pre-rendered images (see PDF Rendering below)
-   - Automatically cycles through pages based on configured interval
-   - Polls `/api/current-pdf` every 10 seconds for updates
-   - Loops indefinitely when reaching the last page
+1. **Multi-Display & Multi-Zone Display View** (`/display/<slug>`):
+   - Supports 7 `LAYOUT_PRESETS` (`fullscreen`, `split-h`, `split-v`, `sidebar-r`, `sidebar-b`, `thirds-h`, `quad`).
+   - Each zone runs a `SlideEngine` polling `/api/display/<slug>/zone/<zone_index>/current` every 10 seconds.
+   - Polling picks up weekday changes (00:00), content updates, layout changes, and app deploys (`APP_VERSION`).
+   - When `layout_preset == 'fullscreen'`, `zone_api(..., 0)` delegates directly to `display_api(slug)`.
 
-2. **Admin Panel** (`/admin`):
-   - Protected by Flask-Login authentication
-   - File management: upload, rename, delete PDFs
-   - Selection: choose specific PDF or auto-select newest
-   - Settings: configure page cycling interval
-   - Pagination: 10 files per page
+2. **Users & Access**:
+   - **Administrator** (`config.json` credentials, `db_id = 0`): everything, including displays, layouts, users and global settings.
+   - **Users** (`users` table): see only displays they have access to. Access (`user_zone_permissions`) is the whole display (`zone_index = -1`) or single zones. Single-zone access is cleared when a layout changes.
+   - Library: users see and manage only their own files; the admin manages all files.
 
-3. **Authentication**:
-   - Single admin user with bcrypt-hashed password
-   - Credentials stored in `config.json`
-   - Session-based authentication via Flask-Login
+3. **Shared Playlists**:
+   - One playlist per display (fullscreen) or zone, edited by everyone with access.
+   - Only a file's owner can add it (the admin too), so deleting your own file never changes other people's entries.
+   - Users change/remove only their own entries (owner = owner of the media item) but may reorder the whole list.
+   - `weekdays` (string of digits, `0` = Monday) limits an entry to certain days. With nothing to show today, the area falls back to the selected or newest **admin** file; user uploads never appear on a screen by themselves.
 
-4. **File Storage**:
-   - PDFs stored in `uploads/` directory
-   - Files saved with UUID filenames to prevent conflicts
-   - Original names preserved in database
-   - Max file size: 100MB
+4. **Admin UI** (`templates/admin.html`):
+   - Collapsible display settings drawer and creation forms; layout preview thumbnails.
+   - In multi-zone layouts the fullscreen playlist is hidden (banner points to the zone playlists).
+   - `Benutzer` tab (admin only): accounts and access checkboxes.
+   - Confirm dialogs use `<form data-confirm="...">`; never put names into inline JavaScript.
 
-### Database Schema
+5. **PDF Rendering**:
+   - PDFs are pre-rendered in a background thread (`_render_pdf_background`) using `pdftoppm` and Pillow (`_render_pdf_spreads` for `paired`/`book` spreads).
+   - Output images are stored in `renders/<display_id>/` and tracked via `/api/render-jobs` (filtered by owner for non-admin users).
 
-**pdf_files table**:
-- `id`: Primary key
-- `filename`: UUID-based filename on disk
-- `original_name`: User-friendly display name
-- `upload_date`: Timestamp of upload
-- `file_size`: File size in bytes
+### Database Schema (`models.py`)
 
-**settings table**:
-- `key`: Setting name (primary key)
-- `value`: Setting value (stored as text)
-
-Default settings:
-- `selected_pdf_id`: ID of currently selected PDF (0 = newest)
-- `cycle_interval`: Seconds per page (default: 10)
-
-### PDF Rendering
-
-- PDFs are pre-rendered server-side with `pdftoppm` (poppler-utils) on upload
-- Output images stored in `renders/<display_id>/`
-- Display shows `<img>` tags — no client-side PDF processing
+- `displays`: `id`, `name`, `slug`, `width`, `height`, `selected_media_id`, `cycle_interval`, `background_color`, `progress_indicator`, `video_fit`, `ambient_bg`, `layout_preset`
+- `zones`: `id`, `display_id`, `zone_index`, `selected_media_id`, `cycle_interval`
+- `media_items`: `id`, `content_type`, `filename`, `original_name`, `url`, `upload_date`, `file_size`, `scale_to_fit`, `user_id` (`0` = Admin)
+- `gallery_images`: `id`, `media_id`, `filename`, `original_name`, `file_size`, `position`
+- `pdf_renders` & `pdf_spread_renders`: pre-rendered page PNG references per `media_id` and `display_id`
+- `playlist_items`: `id`, `display_id`, `media_id`, `duration`, `position`, `spread_mode`, `weekdays`
+- `zone_playlist_items`: `id`, `zone_id`, `media_id`, `duration`, `position`, `spread_mode`, `weekdays`
+- `users`: `id`, `username`, `password_hash`, `display_name`, `created_at`
+- `user_zone_permissions`: `id`, `user_id`, `display_id`, `zone_index` (`-1` = whole display)
+- `settings`: global key/value settings (`auto_cleanup_enabled`, `auto_cleanup_days`)
 
 ## Important Patterns
 
 ### Database Access
 
-Always use the context manager from models.py:
+Always use the context manager from `models.py`:
 
 ```python
 from models import get_db
 
 with get_db() as conn:
-    result = conn.execute('SELECT * FROM pdf_files').fetchall()
+    result = conn.execute('SELECT * FROM displays').fetchall()
     # conn.commit() called automatically on success
     # conn.rollback() called on exception
 ```
 
-### File Upload Handling
+### Permission Checks
 
-```python
-# Generate unique filename
-unique_filename = f"{uuid.uuid4()}.pdf"
-filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
-
-# Save and record
-file.save(filepath)
-file_size = os.path.getsize(filepath)
-add_pdf(unique_filename, original_name, file_size)
-```
-
-### Password Verification
-
-```python
-import bcrypt
-
-def verify_password(password):
-    password_hash = config.admin_password_hash
-    return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
-```
-
-## Configuration
-
-The `config.json` file must be created from `config.json.example`. Required fields:
-
-- `admin_username`: Admin login username
-- `admin_password_hash`: Bcrypt hash (generate with `generate_password_hash.py`)
-- `secret_key`: Flask session secret (change from default!)
-- `port`: Server port (default: 8080)
-- `host`: Bind address (default: 0.0.0.0)
-- `upload_folder`: PDF storage directory (default: uploads)
+- Admin-only routes must use `@admin_required`.
+- Media mutations must check `_can_access_media(media)`.
+- Playlist routes must call `_require_playlist_access(kind, owner_id)`; `kind` is `display` or `zone`.
+- `/proxy` is sandboxed: never add `allow-same-origin`, never forward upstream headers.
 
 ## Routes Overview
 
-**Public Routes**:
-- `GET /`: Redirect to `/display`
-- `GET /display`: PDF viewer page
-- `GET /api/current-pdf`: JSON API for current PDF info
-- `GET /uploads/<filename>`: Serve PDF files
-- `GET /login`: Login page
-- `POST /login`: Handle login
+**Public / Display Routes**:
+- `GET /` & `GET /display`: Redirect to first display (`/display/<slug>`)
+- `GET /display/<slug>`: Fullscreen kiosk view
+- `GET /api/display/<slug>` & `GET /api/display/<slug>/zone/<int:zone_index>/current`: JSON APIs for display/zone content (today's playlist entries or fallback)
+- `GET /api/current-pdf`: Legacy display API proxy
+- `GET /uploads/<filename>` & `GET /renders/<int:display_id>/<filename>`: Serve media and rendered PDF pages
+- `GET /proxy?url=...`: Website proxy for whitelisted `url`-type media items
+- `GET|POST /login`: Authentication for Admin and DB users
 
-**Protected Routes** (require authentication):
-- `GET /admin`: Admin panel with file list
+**Authenticated Routes** (Users & Admin, checked for ownership & access):
+- `GET /admin`: Management UI (role-filtered)
 - `GET /logout`: Logout
-- `POST /admin/upload`: Upload new PDF
-- `POST /admin/rename/<id>`: Rename PDF
-- `POST /admin/delete/<id>`: Delete PDF
-- `POST /admin/select/<id>`: Select specific PDF to display
-- `POST /admin/select-newest`: Auto-select newest PDF
-- `POST /admin/settings`: Update cycling interval
+- `GET /api/render-jobs`: Background PDF render status
+- `POST /admin/upload`, `POST /admin/url`, `POST /admin/gallery/create`
+- `POST /admin/gallery/<id>/upload`, `.../image/<id>/remove`, `.../image/reorder`
+- `POST /admin/media/<id>/url-options`, `.../youtube-options`, `POST /admin/rename/<id>`, `POST /admin/delete/<id>`
+- `POST /admin/<display|zone>/<id>/playlist/add`, `.../reorder`, `.../item/<item_id>/<remove|duration|spread|weekdays>`
+
+**Admin-Only Routes** (`@admin_required`):
+- `POST /admin/display/create`, `.../settings`, `.../delete`, `.../layout`, `.../regenerate`
+- `POST /admin/users/create`, `.../update`, `.../delete`, `.../access`
+- `POST /admin/settings`, `POST /admin/cleanup`
 
 ## Workflow
 workflow_initialized = true
-
-## Security Considerations
-
-- Passwords stored as bcrypt hashes (cost factor: 12)
-- File uploads restricted to `.pdf` extension
-- Uploaded files use UUID filenames (prevent path traversal)
-- Flask sessions use secret key for signing
-- Login required for all admin operations
-- CSRF protection via Flask forms (POST only)

@@ -530,7 +530,7 @@ These files persist across all updates and only you can modify them.
 
 ## Security Best Practices
 
-1. **Use strong admin passwords** - The password is your only authentication
+1. **Use strong passwords** - Protect both the admin account (`config.json`) and any database user accounts with strong passwords
 2. **Change the secret_key** - Never use the default from config.json.example
 3. **Use HTTPS in production** - Consider using a reverse proxy (nginx, Caddy)
 4. **Keep firewall enabled** - Only open necessary ports

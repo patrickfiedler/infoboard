@@ -5,6 +5,9 @@ from contextlib import contextmanager
 
 DATABASE_PATH = 'infoboard.db'
 
+# Access entry that covers every playlist of a display (otherwise: one zone_index)
+WHOLE_DISPLAY = -1
+
 
 @contextmanager
 def get_db():
@@ -66,7 +69,8 @@ def init_db():
                 url TEXT,
                 upload_date TIMESTAMP NOT NULL,
                 file_size INTEGER NOT NULL DEFAULT 0,
-                scale_to_fit INTEGER NOT NULL DEFAULT 0
+                scale_to_fit INTEGER NOT NULL DEFAULT 0,
+                user_id INTEGER NOT NULL DEFAULT 0
             )
         ''')
 
@@ -153,6 +157,38 @@ def init_db():
         except Exception:
             pass  # Column already exists
 
+        # Multi-user: accounts, and which playlists each account may edit
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL
+            )
+        ''')
+
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS user_zone_permissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                display_id INTEGER NOT NULL,
+                zone_index INTEGER NOT NULL,
+                UNIQUE(user_id, display_id, zone_index)
+            )
+        ''')
+
+        # Migrate: media owner (0 = admin) and weekdays per playlist entry (0 = Monday)
+        for table, column in (
+            ('media_items', 'user_id INTEGER NOT NULL DEFAULT 0'),
+            ('playlist_items', "weekdays TEXT NOT NULL DEFAULT '0123456'"),
+            ('zone_playlist_items', "weekdays TEXT NOT NULL DEFAULT '0123456'"),
+        ):
+            try:
+                conn.execute(f'ALTER TABLE {table} ADD COLUMN {column}')
+            except Exception:
+                pass  # Column already exists
+
         # Global settings (auto-cleanup only; display settings live in displays table)
         conn.execute('''
             CREATE TABLE IF NOT EXISTS settings (
@@ -223,6 +259,42 @@ def init_db():
                  cycle_interval, background_color, progress_indicator)
             )
 
+        _migrate_fullscreen_zone0(conn)
+
+
+def _migrate_fullscreen_zone0(conn):
+    """One-time data migration.
+
+    Older versions kept showing zone 0 on a fullscreen display that had once used
+    a multi-zone layout, while admin edited the display playlist. Fullscreen now
+    always uses the display playlist, so copy what is on screen over to it.
+    """
+    flag = 'fullscreen_zone0_migrated'
+    if conn.execute('SELECT 1 FROM settings WHERE key = ?', (flag,)).fetchone():
+        return
+    # Databases from the first multi-user draft already show the display playlist
+    from_draft = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'display_schedules'"
+    ).fetchone()
+    zones = [] if from_draft else conn.execute(
+        '''SELECT z.id, z.display_id, z.selected_media_id, z.cycle_interval
+           FROM zones z JOIN displays d ON d.id = z.display_id
+           WHERE z.zone_index = 0 AND d.layout_preset = 'fullscreen' '''
+    ).fetchall()
+    for z in zones:
+        conn.execute('DELETE FROM playlist_items WHERE display_id = ?', (z['display_id'],))
+        conn.execute(
+            '''INSERT INTO playlist_items (display_id, media_id, duration, position, spread_mode)
+               SELECT ?, media_id, duration, position, spread_mode
+               FROM zone_playlist_items WHERE zone_id = ?''',
+            (z['display_id'], z['id'])
+        )
+        conn.execute(
+            'UPDATE displays SET selected_media_id = ?, cycle_interval = ? WHERE id = ?',
+            (z['selected_media_id'], z['cycle_interval'], z['display_id'])
+        )
+    conn.execute("INSERT INTO settings (key, value) VALUES (?, '1')", (flag,))
+
 
 # ---------- global settings ----------
 
@@ -288,6 +360,7 @@ def update_display(display_id, **kwargs):
 
 def delete_display(display_id):
     with get_db() as conn:
+        conn.execute('DELETE FROM user_zone_permissions WHERE display_id = ?', (display_id,))
         conn.execute('DELETE FROM playlist_items WHERE display_id = ?', (display_id,))
         zone_ids = [r['id'] for r in conn.execute(
             'SELECT id FROM zones WHERE display_id = ?', (display_id,)
@@ -300,13 +373,13 @@ def delete_display(display_id):
 
 # ---------- media items ----------
 
-def add_media(content_type, original_name, filename=None, url=None, file_size=0, scale_to_fit=False):
+def add_media(content_type, original_name, filename=None, url=None, file_size=0, scale_to_fit=False, user_id=0):
     with get_db() as conn:
         conn.execute(
             '''INSERT INTO media_items
-               (content_type, filename, original_name, url, upload_date, file_size, scale_to_fit)
-               VALUES (?, ?, ?, ?, ?, ?, ?)''',
-            (content_type, filename, original_name, url, datetime.now(), file_size, 1 if scale_to_fit else 0)
+               (content_type, filename, original_name, url, upload_date, file_size, scale_to_fit, user_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            (content_type, filename, original_name, url, datetime.now(), file_size, 1 if scale_to_fit else 0, user_id)
         )
         return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
 
@@ -318,16 +391,19 @@ def get_media(media_id):
         ).fetchone()
 
 
-def get_all_media(limit=None, offset=0):
+def get_all_media(limit=None, offset=0, user_id=None):
     with get_db() as conn:
+        where = 'WHERE m.user_id = ?' if user_id is not None else ''
+        params = [user_id] if user_id is not None else []
+        sql = f'''SELECT m.*, COALESCE(u.display_name, 'Admin') AS owner_name
+                  FROM media_items m
+                  LEFT JOIN users u ON m.user_id = u.id
+                  {where}
+                  ORDER BY m.upload_date DESC'''
         if limit:
-            return conn.execute(
-                'SELECT * FROM media_items ORDER BY upload_date DESC LIMIT ? OFFSET ?',
-                (limit, offset)
-            ).fetchall()
-        return conn.execute(
-            'SELECT * FROM media_items ORDER BY upload_date DESC'
-        ).fetchall()
+            sql += ' LIMIT ? OFFSET ?'
+            params.extend([limit, offset])
+        return conn.execute(sql, params).fetchall()
 
 
 def get_url_media_by_url(url):
@@ -345,16 +421,29 @@ def get_all_pdf_media():
         ).fetchall()
 
 
-def get_media_count():
+def get_media_count(user_id=None):
     with get_db() as conn:
+        if user_id is not None:
+            return conn.execute('SELECT COUNT(*) FROM media_items WHERE user_id = ?', (user_id,)).fetchone()[0]
         return conn.execute('SELECT COUNT(*) FROM media_items').fetchone()[0]
 
 
 def get_newest_media():
+    """Newest admin upload: the fallback for empty playlists. User uploads never
+    appear on a screen unless someone with access adds them to a playlist."""
     with get_db() as conn:
         return conn.execute(
-            'SELECT * FROM media_items ORDER BY upload_date DESC LIMIT 1'
+            'SELECT * FROM media_items WHERE user_id = 0 ORDER BY upload_date DESC LIMIT 1'
         ).fetchone()
+
+
+def get_media_counts_by_user():
+    """Return {user_id: number of media items}."""
+    with get_db() as conn:
+        rows = conn.execute(
+            'SELECT user_id, COUNT(*) AS n FROM media_items GROUP BY user_id'
+        ).fetchall()
+        return {r['user_id']: r['n'] for r in rows}
 
 
 def update_media_scale_to_fit(media_id, scale_to_fit):
@@ -378,54 +467,59 @@ def update_media_name(media_id, new_name):
         )
 
 
+def _delete_media_in_conn(conn, media_id):
+    """Delete a media item within an existing DB connection. Returns cleanup dict or None."""
+    item = conn.execute(
+        'SELECT * FROM media_items WHERE id = ?', (media_id,)
+    ).fetchone()
+    if not item:
+        return None
+
+    renders = conn.execute(
+        'SELECT display_id, render_filename FROM pdf_renders WHERE media_id = ?',
+        (media_id,)
+    ).fetchall()
+
+    spread_renders = conn.execute(
+        'SELECT display_id, render_filename FROM pdf_spread_renders WHERE media_id = ?',
+        (media_id,)
+    ).fetchall()
+
+    gallery_images = []
+    if item['content_type'] == 'gallery':
+        gallery_images = conn.execute(
+            'SELECT filename FROM gallery_images WHERE media_id = ?', (media_id,)
+        ).fetchall()
+        conn.execute('DELETE FROM gallery_images WHERE media_id = ?', (media_id,))
+
+    conn.execute('DELETE FROM pdf_renders WHERE media_id = ?', (media_id,))
+    conn.execute('DELETE FROM pdf_spread_renders WHERE media_id = ?', (media_id,))
+    conn.execute('DELETE FROM playlist_items WHERE media_id = ?', (media_id,))
+    conn.execute('DELETE FROM zone_playlist_items WHERE media_id = ?', (media_id,))
+    conn.execute('DELETE FROM media_items WHERE id = ?', (media_id,))
+    conn.execute(
+        'UPDATE displays SET selected_media_id = 0 WHERE selected_media_id = ?',
+        (media_id,)
+    )
+    conn.execute(
+        'UPDATE zones SET selected_media_id = 0 WHERE selected_media_id = ?',
+        (media_id,)
+    )
+
+    return {
+        'filename': item['filename'],
+        'renders': (
+            [(r['display_id'], r['render_filename']) for r in renders] +
+            [(r['display_id'], r['render_filename']) for r in spread_renders]
+        ),
+        'gallery_images': [r['filename'] for r in gallery_images],
+    }
+
+
 def delete_media(media_id):
     """Delete a media item. Returns dict {filename, renders} for filesystem cleanup."""
     with get_db() as conn:
-        item = conn.execute(
-            'SELECT * FROM media_items WHERE id = ?', (media_id,)
-        ).fetchone()
-        if not item:
-            return None
-
-        renders = conn.execute(
-            'SELECT display_id, render_filename FROM pdf_renders WHERE media_id = ?',
-            (media_id,)
-        ).fetchall()
-
-        spread_renders = conn.execute(
-            'SELECT display_id, render_filename FROM pdf_spread_renders WHERE media_id = ?',
-            (media_id,)
-        ).fetchall()
-
-        gallery_images = []
-        if item['content_type'] == 'gallery':
-            gallery_images = conn.execute(
-                'SELECT filename FROM gallery_images WHERE media_id = ?', (media_id,)
-            ).fetchall()
-            conn.execute('DELETE FROM gallery_images WHERE media_id = ?', (media_id,))
-
-        conn.execute('DELETE FROM pdf_renders WHERE media_id = ?', (media_id,))
-        conn.execute('DELETE FROM pdf_spread_renders WHERE media_id = ?', (media_id,))
-        conn.execute('DELETE FROM playlist_items WHERE media_id = ?', (media_id,))
-        conn.execute('DELETE FROM zone_playlist_items WHERE media_id = ?', (media_id,))
-        conn.execute('DELETE FROM media_items WHERE id = ?', (media_id,))
-        conn.execute(
-            'UPDATE displays SET selected_media_id = 0 WHERE selected_media_id = ?',
-            (media_id,)
-        )
-        conn.execute(
-            'UPDATE zones SET selected_media_id = 0 WHERE selected_media_id = ?',
-            (media_id,)
-        )
-
-        return {
-            'filename': item['filename'],
-            'renders': (
-                [(r['display_id'], r['render_filename']) for r in renders] +
-                [(r['display_id'], r['render_filename']) for r in spread_renders]
-            ),
-            'gallery_images': [r['filename'] for r in gallery_images],
-        }
+        return _delete_media_in_conn(conn, media_id)
 
 
 # ---------- pdf renders ----------
@@ -556,19 +650,24 @@ def cleanup_old_media(upload_folder):
     cutoff_date = datetime.now() - timedelta(days=cleanup_days)
 
     with get_db() as conn:
-        # Collect all actively-selected media IDs across displays
+        # Collect all actively-selected media IDs across displays and playlists
         active_ids = set()
         displays = conn.execute('SELECT id, selected_media_id FROM displays').fetchall()
         for d in displays:
             sid = d['selected_media_id']
             if sid == 0:
                 newest = conn.execute(
-                    'SELECT id FROM media_items ORDER BY upload_date DESC LIMIT 1'
+                    'SELECT id FROM media_items WHERE user_id = 0 ORDER BY upload_date DESC LIMIT 1'
                 ).fetchone()
                 if newest:
                     active_ids.add(newest['id'])
             else:
                 active_ids.add(sid)
+
+        for row in conn.execute('SELECT DISTINCT media_id FROM playlist_items').fetchall():
+            active_ids.add(row['media_id'])
+        for row in conn.execute('SELECT DISTINCT media_id FROM zone_playlist_items').fetchall():
+            active_ids.add(row['media_id'])
 
         if active_ids:
             placeholders = ','.join('?' * len(active_ids))
@@ -616,101 +715,90 @@ def cleanup_old_media(upload_folder):
 
 # ---------- playlists ----------
 
-def get_playlist_items(display_id):
-    """Return ordered playlist items joined with media info."""
+# A playlist belongs to a whole display or to one zone: kind -> (table, owner column)
+PLAYLISTS = {
+    'display': ('playlist_items', 'display_id'),
+    'zone': ('zone_playlist_items', 'zone_id'),
+}
+
+
+def get_playlist_items(kind, owner_id, item_id=None):
+    """Return ordered playlist entries joined with media info and media owner."""
+    table, column = PLAYLISTS[kind]
+    sql = f'''SELECT p.id, p.media_id, p.duration, p.position, p.spread_mode, p.weekdays,
+                     m.content_type, m.original_name, m.filename, m.url, m.scale_to_fit,
+                     m.user_id AS owner_id, COALESCE(u.display_name, 'Admin') AS owner_name
+              FROM {table} p
+              JOIN media_items m ON p.media_id = m.id
+              LEFT JOIN users u ON u.id = m.user_id
+              WHERE p.{column} = ?'''
+    params = [owner_id]
+    if item_id is not None:
+        sql += ' AND p.id = ?'
+        params.append(item_id)
     with get_db() as conn:
-        return conn.execute(
-            '''SELECT pi.id, pi.display_id, pi.media_id, pi.duration, pi.position, pi.spread_mode,
-                      m.content_type, m.original_name, m.filename, m.url, m.scale_to_fit
-               FROM playlist_items pi
-               JOIN media_items m ON pi.media_id = m.id
-               WHERE pi.display_id = ?
-               ORDER BY pi.position''',
-            (display_id,)
-        ).fetchall()
+        return conn.execute(sql + ' ORDER BY p.position', params).fetchall()
 
 
-def add_playlist_item(display_id, media_id, duration):
+def get_playlist_item(kind, owner_id, item_id):
+    rows = get_playlist_items(kind, owner_id, item_id)
+    return rows[0] if rows else None
+
+
+def add_playlist_item(kind, owner_id, media_id, duration):
+    table, column = PLAYLISTS[kind]
     with get_db() as conn:
         max_pos = conn.execute(
-            'SELECT COALESCE(MAX(position), 0) FROM playlist_items WHERE display_id = ?',
-            (display_id,)
+            f'SELECT COALESCE(MAX(position), 0) FROM {table} WHERE {column} = ?', (owner_id,)
         ).fetchone()[0]
         conn.execute(
-            'INSERT INTO playlist_items (display_id, media_id, duration, position) VALUES (?, ?, ?, ?)',
-            (display_id, media_id, duration, max_pos + 1)
+            f'INSERT INTO {table} ({column}, media_id, duration, position) VALUES (?, ?, ?, ?)',
+            (owner_id, media_id, duration, max_pos + 1)
         )
         return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
 
 
-def remove_playlist_item(item_id, display_id):
+def remove_playlist_item(kind, owner_id, item_id):
+    table, column = PLAYLISTS[kind]
     with get_db() as conn:
-        conn.execute(
-            'DELETE FROM playlist_items WHERE id = ? AND display_id = ?',
-            (item_id, display_id)
-        )
+        conn.execute(f'DELETE FROM {table} WHERE id = ? AND {column} = ?', (item_id, owner_id))
         # Repack positions to stay gapless
         items = conn.execute(
-            'SELECT id FROM playlist_items WHERE display_id = ? ORDER BY position',
-            (display_id,)
+            f'SELECT id FROM {table} WHERE {column} = ? ORDER BY position', (owner_id,)
         ).fetchall()
         for i, row in enumerate(items, 1):
-            conn.execute('UPDATE playlist_items SET position = ? WHERE id = ?', (i, row['id']))
+            conn.execute(f'UPDATE {table} SET position = ? WHERE id = ?', (i, row['id']))
 
 
-def update_playlist_item_duration(item_id, display_id, duration):
+def update_playlist_item(kind, owner_id, item_id, field, value):
+    table, column = PLAYLISTS[kind]
+    if field not in ('duration', 'spread_mode', 'weekdays'):
+        raise ValueError(field)
     with get_db() as conn:
         conn.execute(
-            'UPDATE playlist_items SET duration = ? WHERE id = ? AND display_id = ?',
-            (duration, item_id, display_id)
+            f'UPDATE {table} SET {field} = ? WHERE id = ? AND {column} = ?',
+            (value, item_id, owner_id)
         )
 
 
-def update_playlist_item_spread_mode(item_id, display_id, spread_mode):
-    with get_db() as conn:
-        conn.execute(
-            'UPDATE playlist_items SET spread_mode = ? WHERE id = ? AND display_id = ?',
-            (spread_mode, item_id, display_id)
-        )
-
-
-def reorder_playlist_items(display_id, ordered_ids):
+def reorder_playlist_items(kind, owner_id, ordered_ids):
     """Set positions from an ordered list of item IDs."""
+    table, column = PLAYLISTS[kind]
     with get_db() as conn:
         for i, item_id in enumerate(ordered_ids, 1):
             conn.execute(
-                'UPDATE playlist_items SET position = ? WHERE id = ? AND display_id = ?',
-                (i, item_id, display_id)
+                f'UPDATE {table} SET position = ? WHERE id = ? AND {column} = ?',
+                (i, item_id, owner_id)
             )
-
-
-def move_playlist_item(item_id, display_id, direction):
-    """Swap item with its neighbour. direction: -1 = up, +1 = down."""
-    with get_db() as conn:
-        items = conn.execute(
-            'SELECT id, position FROM playlist_items WHERE display_id = ? ORDER BY position',
-            (display_id,)
-        ).fetchall()
-        ids = [row['id'] for row in items]
-        if item_id not in ids:
-            return
-        idx = ids.index(item_id)
-        swap_idx = idx + direction
-        if swap_idx < 0 or swap_idx >= len(ids):
-            return
-        pos_a = items[idx]['position']
-        pos_b = items[swap_idx]['position']
-        conn.execute('UPDATE playlist_items SET position = ? WHERE id = ?', (pos_b, ids[idx]))
-        conn.execute('UPDATE playlist_items SET position = ? WHERE id = ?', (pos_a, ids[swap_idx]))
 
 
 # ---------- galleries ----------
 
-def add_gallery(name):
+def add_gallery(name, user_id=0):
     with get_db() as conn:
         conn.execute(
-            'INSERT INTO media_items (content_type, original_name, upload_date, file_size) VALUES (?, ?, ?, ?)',
-            ('gallery', name, datetime.now(), 0)
+            'INSERT INTO media_items (content_type, original_name, upload_date, file_size, user_id) VALUES (?, ?, ?, ?, ?)',
+            ('gallery', name, datetime.now(), 0, user_id)
         )
         return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
 
@@ -816,66 +904,101 @@ def update_zone_settings(zone_id, selected_media_id, cycle_interval):
         )
 
 
-def get_zone_playlist_items(zone_id):
+# ---------- users ----------
+
+def get_all_users():
     with get_db() as conn:
         return conn.execute(
-            '''SELECT zpi.id, zpi.zone_id, zpi.media_id, zpi.duration, zpi.position, zpi.spread_mode,
-                      m.content_type, m.original_name, m.filename, m.url, m.scale_to_fit
-               FROM zone_playlist_items zpi
-               JOIN media_items m ON zpi.media_id = m.id
-               WHERE zpi.zone_id = ?
-               ORDER BY zpi.position''',
-            (zone_id,)
+            'SELECT * FROM users ORDER BY display_name COLLATE NOCASE, id'
         ).fetchall()
 
 
-def add_zone_playlist_item(zone_id, media_id, duration):
+def get_user(user_id):
     with get_db() as conn:
-        max_pos = conn.execute(
-            'SELECT COALESCE(MAX(position), 0) FROM zone_playlist_items WHERE zone_id = ?',
-            (zone_id,)
-        ).fetchone()[0]
+        return conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+
+
+def get_user_by_username(username):
+    with get_db() as conn:
+        return conn.execute(
+            'SELECT * FROM users WHERE LOWER(username) = LOWER(?)', (username,)
+        ).fetchone()
+
+
+def create_user(username, password_hash, display_name):
+    with get_db() as conn:
         conn.execute(
-            'INSERT INTO zone_playlist_items (zone_id, media_id, duration, position) VALUES (?, ?, ?, ?)',
-            (zone_id, media_id, duration, max_pos + 1)
+            'INSERT INTO users (username, password_hash, display_name, created_at) VALUES (?, ?, ?, ?)',
+            (username, password_hash, display_name, datetime.now())
         )
         return conn.execute('SELECT last_insert_rowid()').fetchone()[0]
 
 
-def remove_zone_playlist_item(item_id, zone_id):
+def update_user(user_id, username=None, display_name=None, password_hash=None):
+    fields = []
+    values = []
+    if username is not None:
+        fields.append('username = ?')
+        values.append(username)
+    if display_name is not None:
+        fields.append('display_name = ?')
+        values.append(display_name)
+    if password_hash is not None:
+        fields.append('password_hash = ?')
+        values.append(password_hash)
+    if not fields:
+        return
+    values.append(user_id)
     with get_db() as conn:
-        conn.execute(
-            'DELETE FROM zone_playlist_items WHERE id = ? AND zone_id = ?',
-            (item_id, zone_id)
-        )
-        items = conn.execute(
-            'SELECT id FROM zone_playlist_items WHERE zone_id = ? ORDER BY position',
-            (zone_id,)
+        conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
+
+
+def delete_user(user_id):
+    """Delete a user and their media (which also removes it from all playlists).
+    Returns list of media cleanup dicts for physical file removal."""
+    cleanups = []
+    with get_db() as conn:
+        conn.execute('DELETE FROM user_zone_permissions WHERE user_id = ?', (user_id,))
+        for row in conn.execute(
+            'SELECT id FROM media_items WHERE user_id = ?', (user_id,)
+        ).fetchall():
+            cleanups.append(_delete_media_in_conn(conn, row['id']))
+        conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    return cleanups
+
+
+# ---------- user access ----------
+
+def get_user_access(user_id, display_id):
+    """Return set of granted zone_index values (may contain WHOLE_DISPLAY)."""
+    with get_db() as conn:
+        rows = conn.execute(
+            'SELECT zone_index FROM user_zone_permissions WHERE user_id = ? AND display_id = ?',
+            (user_id, display_id)
         ).fetchall()
-        for i, row in enumerate(items, 1):
-            conn.execute('UPDATE zone_playlist_items SET position = ? WHERE id = ?', (i, row['id']))
+        return {r['zone_index'] for r in rows}
 
 
-def update_zone_playlist_item_duration(item_id, zone_id, duration):
+def set_user_access(user_id, display_id, zone_indices):
     with get_db() as conn:
         conn.execute(
-            'UPDATE zone_playlist_items SET duration = ? WHERE id = ? AND zone_id = ?',
-            (duration, item_id, zone_id)
+            'DELETE FROM user_zone_permissions WHERE user_id = ? AND display_id = ?',
+            (user_id, display_id)
         )
-
-
-def update_zone_playlist_item_spread_mode(item_id, zone_id, spread_mode):
-    with get_db() as conn:
-        conn.execute(
-            'UPDATE zone_playlist_items SET spread_mode = ? WHERE id = ? AND zone_id = ?',
-            (spread_mode, item_id, zone_id)
-        )
-
-
-def reorder_zone_playlist_items(zone_id, ordered_ids):
-    with get_db() as conn:
-        for i, item_id in enumerate(ordered_ids, 1):
+        for zi in zone_indices:
             conn.execute(
-                'UPDATE zone_playlist_items SET position = ? WHERE id = ? AND zone_id = ?',
-                (i, item_id, zone_id)
+                'INSERT OR IGNORE INTO user_zone_permissions (user_id, display_id, zone_index) VALUES (?, ?, ?)',
+                (user_id, display_id, zi)
             )
+
+
+def clear_zone_access(display_id):
+    """Remove single-zone grants (whole-display grants stay). Returns affected user count."""
+    with get_db() as conn:
+        where = 'WHERE display_id = ? AND zone_index != ?'
+        params = (display_id, WHOLE_DISPLAY)
+        count = conn.execute(
+            f'SELECT COUNT(DISTINCT user_id) FROM user_zone_permissions {where}', params
+        ).fetchone()[0]
+        conn.execute(f'DELETE FROM user_zone_permissions {where}', params)
+        return count
