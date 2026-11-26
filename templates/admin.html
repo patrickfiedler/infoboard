@@ -340,12 +340,12 @@
                         <button type="button" class="btn-sm btn-secondary toggle-schedule-btn" id="btn-toggle-schedule-{{ d.id }}"
                                 onclick="toggleDisplaySchedule({{ d.id }})">📅 Wochenplan ▾</button>
                         <form method="POST" action="{{ url_for('regenerate_renders', display_id=d.id) }}"
-                              onsubmit="return confirm('Alle PDFs für dieses Display neu rendern?');">
+                              data-confirm="Alle PDFs für dieses Display neu rendern?">
                             <button type="submit" class="btn-sm btn-secondary">PDFs neu rendern</button>
                         </form>
                         {% if displays|length > 1 %}
                         <form method="POST" action="{{ url_for('delete_display_route', display_id=d.id) }}"
-                              onsubmit="return confirm('Display &quot;{{ d.name }}&quot; wirklich löschen?');">
+                              data-confirm="Display &quot;{{ d.name }}&quot; wirklich löschen?">
                             <button type="submit" class="btn-sm btn-danger">Löschen</button>
                         </form>
                         {% endif %}
@@ -877,7 +877,7 @@
                                             onclick="toggleGalleryEditor({{ item.id }})">Bilder ({{ img_c }})</button>
                                 {% endif %}
                                 <form method="POST" action="{{ url_for('delete_media_item', media_id=item.id) }}"
-                                      onsubmit="return confirm('&quot;{{ item.original_name }}&quot; wirklich löschen?');">
+                                      data-confirm="&quot;{{ item.original_name }}&quot; wirklich löschen?">
                                     <button type="submit" class="btn-sm btn-danger">Löschen</button>
                                 </form>
                             </div>
@@ -1023,7 +1023,7 @@
             </form>
             <div style="margin-top:12px;padding-top:12px;border-top:1px solid #ddd;">
                 <form method="POST" action="{{ url_for('manual_cleanup') }}"
-                      onsubmit="return confirm('Dateien älter als {{ auto_cleanup_days }} Tage löschen (aktive Inhalte bleiben erhalten)?');">
+                      data-confirm="Dateien älter als {{ auto_cleanup_days }} Tage löschen (aktive Inhalte bleiben erhalten)?">
                     <button type="submit" class="btn-info btn-sm">Jetzt aufräumen</button>
                 </form>
                 <p style="margin-top:6px;font-size:12px;color:#999;">
@@ -1085,7 +1085,7 @@
                         <a href="{{ url_for('admin', view_user=u.id) }}" class="btn btn-sm btn-info"
                            onclick="sessionStorage.setItem('adminTab', 'displays');">Playlists öffnen</a>
                         <form method="POST" action="{{ url_for('users_delete', user_id=u.id) }}"
-                              onsubmit="return confirm('Benutzer &quot;{{ u.display_name }}&quot; wirklich löschen? Alle Inhalte dieses Benutzers werden ebenfalls gelöscht!');">
+                              data-confirm="Benutzer &quot;{{ u.display_name }}&quot; wirklich löschen? Alle Inhalte dieses Benutzers werden ebenfalls gelöscht!">
                             <button type="submit" class="btn-sm btn-danger">Löschen</button>
                         </form>
                     </div>
@@ -1170,6 +1170,13 @@
 <script src="{{ url_for('static', filename='js/sortable.min.js') }}"></script>
 <script>
     var TARGET_USER_ID = {{ target_user_id | tojson }};
+
+    // Confirm dialogs: <form data-confirm="...">. The text stays plain data, so names
+    // containing quotes can never break or inject script.
+    document.addEventListener('submit', function(e) {
+        var msg = e.target.dataset.confirm;
+        if (msg && !confirm(msg)) e.preventDefault();
+    });
 
     // Tab switching
     function switchTab(name, btn) {
